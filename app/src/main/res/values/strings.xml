@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UScrooge Trading</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="signals">Signals</string>
+    <string name="settings">Settings</string>
+    <string name="notification_channel_name">Trading Signals</string>
+    <string name="notification_channel_description">Receive notifications for trading signals and order execution</string>
+</resources>

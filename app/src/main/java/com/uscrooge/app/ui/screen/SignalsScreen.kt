@@ -1,0 +1,413 @@
+package com.uscrooge.app.ui.screen
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.uscrooge.app.data.model.SignalStatus
+import com.uscrooge.app.data.model.SignalType
+import com.uscrooge.app.data.model.TradingSignal
+import com.uscrooge.app.ui.viewmodel.ExecutionState
+import com.uscrooge.app.ui.viewmodel.SignalsUiState
+import com.uscrooge.app.ui.viewmodel.SignalsViewModel
+import java.text.SimpleDateFormat
+import java.util.*
+
+@Composable
+fun SignalsScreen(
+    viewModel: SignalsViewModel,
+    modifier: Modifier = Modifier
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val executionState by viewModel.executionState.collectAsState()
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Show execution state snackbar
+        when (val state = executionState) {
+            is ExecutionState.Success -> {
+                Snackbar(
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(state.message)
+                }
+            }
+            is ExecutionState.Error -> {
+                Snackbar(
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ) {
+                    Text(state.message)
+                }
+            }
+            else -> {}
+        }
+
+        when (val state = uiState) {
+            is SignalsUiState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            is SignalsUiState.Success -> {
+                SignalsContent(
+                    signals = state.signals,
+                    executionState = executionState,
+                    onExecute = { viewModel.executeSignal(it) },
+                    onIgnore = { viewModel.ignoreSignal(it) },
+                    onRefresh = { viewModel.refreshSignals() }
+                )
+            }
+
+            is SignalsUiState.Error -> {
+                ErrorView(
+                    message = state.message,
+                    onRetry = { viewModel.refreshSignals() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SignalsContent(
+    signals: List<TradingSignal>,
+    executionState: ExecutionState,
+    onExecute: (TradingSignal) -> Unit,
+    onIgnore: (TradingSignal) -> Unit,
+    onRefresh: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Trading Signals",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        val pendingSignals = signals.filter { it.status == SignalStatus.PENDING }
+        val otherSignals = signals.filter { it.status != SignalStatus.PENDING }
+
+        if (signals.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No signals available",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (pendingSignals.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Pending (${pendingSignals.size})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    items(pendingSignals) { signal ->
+                        SignalCard(
+                            signal = signal,
+                            isExecuting = executionState is ExecutionState.Executing &&
+                                    (executionState as ExecutionState.Executing).signalId == signal.id,
+                            onExecute = { onExecute(signal) },
+                            onIgnore = { onIgnore(signal) }
+                        )
+                    }
+
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
+
+                if (otherSignals.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "History",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    items(otherSignals) { signal ->
+                        SignalCard(
+                            signal = signal,
+                            isExecuting = false,
+                            onExecute = null,
+                            onIgnore = null
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SignalCard(
+    signal: TradingSignal,
+    isExecuting: Boolean,
+    onExecute: (() -> Unit)?,
+    onIgnore: (() -> Unit)?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when (signal.status) {
+                SignalStatus.PENDING -> MaterialTheme.colorScheme.surface
+                SignalStatus.EXECUTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                SignalStatus.IGNORED -> MaterialTheme.colorScheme.surfaceVariant
+                SignalStatus.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = when (signal.type) {
+                        SignalType.BUY -> Icons.Default.TrendingUp
+                        SignalType.SELL -> Icons.Default.TrendingDown
+                        SignalType.HOLD -> Icons.Default.Remove
+                    }
+                    val iconColor = when (signal.type) {
+                        SignalType.BUY -> Color(0xFF4CAF50)
+                        SignalType.SELL -> Color(0xFFE57373)
+                        SignalType.HOLD -> Color.Gray
+                    }
+
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column {
+                        Text(
+                            text = signal.pair,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = signal.type.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = iconColor
+                        )
+                    }
+                }
+
+                SignalStrengthBadge(signal.strength)
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Divider()
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Price information
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                InfoItem("Current Price", "€${String.format("%.2f", signal.currentPrice)}")
+                InfoItem("Suggested", "€${String.format("%.2f", signal.suggestedPrice)}")
+                InfoItem("Amount", "€${String.format("%.2f", signal.suggestedAmount)}")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                InfoItem("Stop Loss", "€${String.format("%.2f", signal.stopLoss)}")
+                InfoItem("Take Profit", "€${String.format("%.2f", signal.takeProfit)}")
+                InfoItem("R/R Ratio", String.format("%.2f", signal.riskRewardRatio))
+            }
+
+            // Reasons
+            if (signal.getReasonsList().isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Reasons:",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                signal.getReasonsList().take(3).forEach { reason ->
+                    Text(
+                        text = "• $reason",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Timestamp and status
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatTimestamp(signal.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                StatusBadge(signal.status)
+            }
+
+            // Action buttons for pending signals
+            if (signal.status == SignalStatus.PENDING && onExecute != null && onIgnore != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onExecute,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isExecuting,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (signal.type == SignalType.BUY)
+                                Color(0xFF4CAF50) else Color(0xFFE57373)
+                        )
+                    ) {
+                        if (isExecuting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Execute")
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = onIgnore,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isExecuting
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Ignore")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SignalStrengthBadge(strength: Double) {
+    val percent = (strength * 100).toInt()
+    val color = when {
+        strength >= 0.8 -> Color(0xFF4CAF50)
+        strength >= 0.65 -> Color(0xFFFF9800)
+        else -> Color(0xFFE57373)
+    }
+
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = color.copy(alpha = 0.2f)
+    ) {
+        Text(
+            text = "$percent%",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
+}
+
+@Composable
+fun StatusBadge(status: SignalStatus) {
+    val (text, color) = when (status) {
+        SignalStatus.PENDING -> "Pending" to Color(0xFFFF9800)
+        SignalStatus.EXECUTING -> "Executing" to Color(0xFF2196F3)
+        SignalStatus.EXECUTED -> "Executed" to Color(0xFF4CAF50)
+        SignalStatus.IGNORED -> "Ignored" to Color.Gray
+        SignalStatus.FAILED -> "Failed" to Color(0xFFE57373)
+        SignalStatus.EXPIRED -> "Expired" to Color.Gray
+    }
+
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = color.copy(alpha = 0.2f)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+    }
+}
+
+fun formatTimestamp(timestamp: Long): String {
+    val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+    return sdf.format(Date(timestamp))
+}

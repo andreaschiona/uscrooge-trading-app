@@ -1,0 +1,49 @@
+name: opencode
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      discussions: write
+      id-token: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Corretto da v6 a v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+          git config --global user.name "opencode-agent[bot]"
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/big-pickle
+          use_github_token: true
+
+      # Questo step garantisce che i file creati da Docker 
+      # siano accessibili a Git per il commit/push
+      - name: Fix permissions for Git
+        if: failure() || success()
+        run: sudo chown -R $USER:$USER ${{ github.workspace }}
+
+      - name: Upload Opencode Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-debug-logs
+          path: /home/runner/.local/share/opencode/log/

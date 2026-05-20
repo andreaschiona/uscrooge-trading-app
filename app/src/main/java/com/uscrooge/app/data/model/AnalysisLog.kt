@@ -17,5 +17,15 @@ data class AnalysisLogEntry(
     val isSuccess: Boolean,
     val signalType: SignalType? = null,
     val strength: Double? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    // Technical analysis details
+    val currentPrice: Double? = null,
+    val rsiValue: Double? = null,
+    val rsiSignal: String? = null,
+    val macdHistogram: Double? = null,
+    val macdSignal: String? = null,
+    val trend: String? = null,
+    val volumeRatio: Double? = null,
+    val candlestickPattern: String? = null,
+    val availableBalance: Double? = null
 )

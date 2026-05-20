@@ -4,9 +4,8 @@ data class TradingConfig(
     // Trading pairs
     val tradingPairs: List<String> = listOf("BTC/EUR", "ETH/EUR", "SOL/EUR", "XRP/EUR"),
 
-    // Budget and risk management
-    val budgetEur: Double = 100.0,
-    val riskPerTrade: Double = 0.25,          // 25% of budget per trade
+    // Risk management
+    val riskPerTrade: Double = 0.25,          // 25% of available balance per trade
     val maxOpenPositions: Int = 3,
     val maxDailyTrades: Int = 5,
 
@@ -59,7 +58,6 @@ data class TradingConfig(
 ) {
     fun validate(): Result<Unit> {
         return when {
-            budgetEur <= 0 -> Result.failure(IllegalArgumentException("Budget must be positive"))
             riskPerTrade <= 0 || riskPerTrade > 1.0 ->
                 Result.failure(IllegalArgumentException("Risk per trade must be between 0 and 1"))
             minSignalStrength < 0 || minSignalStrength > 1.0 ->
@@ -76,7 +74,7 @@ data class TradingConfig(
         }
     }
 
-    fun getMaxAmountPerTrade(): Double {
-        return budgetEur * riskPerTrade
+    fun getMaxAmountPerTrade(availableBalance: Double): Double {
+        return availableBalance * riskPerTrade
     }
 }

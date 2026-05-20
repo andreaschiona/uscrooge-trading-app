@@ -25,7 +25,6 @@ class ConfigRepository(private val context: Context) {
 
     companion object {
         private val TRADING_PAIRS = stringPreferencesKey("trading_pairs")
-        private val BUDGET_EUR = doublePreferencesKey("budget_eur")
         private val RISK_PER_TRADE = doublePreferencesKey("risk_per_trade")
         private val MAX_OPEN_POSITIONS = intPreferencesKey("max_open_positions")
         private val MAX_DAILY_TRADES = intPreferencesKey("max_daily_trades")
@@ -70,7 +69,6 @@ class ConfigRepository(private val context: Context) {
         .map { preferences ->
             TradingConfig(
                 tradingPairs = preferences[TRADING_PAIRS]?.split(",") ?: listOf("BTC/EUR", "ETH/EUR", "SOL/EUR", "XRP/EUR"),
-                budgetEur = preferences[BUDGET_EUR] ?: 100.0,
                 riskPerTrade = preferences[RISK_PER_TRADE] ?: 0.25,
                 maxOpenPositions = preferences[MAX_OPEN_POSITIONS] ?: 3,
                 maxDailyTrades = preferences[MAX_DAILY_TRADES] ?: 5,
@@ -108,7 +106,6 @@ class ConfigRepository(private val context: Context) {
     suspend fun updateConfig(config: TradingConfig) {
         context.dataStore.edit { preferences ->
             preferences[TRADING_PAIRS] = config.tradingPairs.joinToString(",")
-            preferences[BUDGET_EUR] = config.budgetEur
             preferences[RISK_PER_TRADE] = config.riskPerTrade
             preferences[MAX_OPEN_POSITIONS] = config.maxOpenPositions
             preferences[MAX_DAILY_TRADES] = config.maxDailyTrades

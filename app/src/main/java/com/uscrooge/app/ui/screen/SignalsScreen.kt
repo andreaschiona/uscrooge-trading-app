@@ -515,48 +515,76 @@ fun AnalysisLogCard(log: AnalysisLog) {
 
 @Composable
 fun AnalysisLogEntryRow(entry: AnalysisLogEntry) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (entry.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
-                contentDescription = null,
-                tint = if (entry.isSuccess) Color(0xFF4CAF50) else Color(0xFFE57373),
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = entry.pair,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium
-            )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (entry.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                    contentDescription = null,
+                    tint = if (entry.isSuccess) Color(0xFF4CAF50) else Color(0xFFE57373),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = entry.pair,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            if (entry.isSuccess) {
+                val info = when (entry.signalType) {
+                    SignalType.BUY -> "BUY ${((entry.strength ?: 0.0) * 100).toInt()}%"
+                    SignalType.SELL -> "SELL ${((entry.strength ?: 0.0) * 100).toInt()}%"
+                    SignalType.HOLD -> "HOLD"
+                    null -> "No signal"
+                }
+                Text(
+                    text = info,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (entry.signalType) {
+                        SignalType.BUY -> Color(0xFF4CAF50)
+                        SignalType.SELL -> Color(0xFFE57373)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            } else {
+                Text(
+                    text = entry.errorMessage ?: "Error",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFE57373),
+                    maxLines = 1
+                )
+            }
         }
 
+        // Show detailed technical indicators for successful entries
         if (entry.isSuccess) {
-            val info = when (entry.signalType) {
-                SignalType.BUY -> "BUY ${((entry.strength ?: 0.0) * 100).toInt()}%"
-                SignalType.SELL -> "SELL ${((entry.strength ?: 0.0) * 100).toInt()}%"
-                SignalType.HOLD -> "HOLD"
-                null -> "No signal"
-            }
+            val detailColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val detailStyle = MaterialTheme.typography.labelSmall
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = info,
-                style = MaterialTheme.typography.bodySmall,
-                color = when (entry.signalType) {
-                    SignalType.BUY -> Color(0xFF4CAF50)
-                    SignalType.SELL -> Color(0xFFE57373)
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                }
+                text = buildString {
+                    entry.currentPrice?.let { append("Price: €${String.format("%.2f", it)}") }
+                    entry.rsiValue?.let { append(" | RSI: ${String.format("%.1f", it)} (${entry.rsiSignal})") }
+                    entry.macdHistogram?.let { append(" | MACD: ${String.format("%.4f", it)} (${entry.macdSignal})") }
+                },
+                style = detailStyle,
+                color = detailColor
             )
-        } else {
             Text(
-                text = entry.errorMessage ?: "Error",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFE57373),
-                maxLines = 1
+                text = buildString {
+                    entry.trend?.let { append("Trend: $it") }
+                    entry.volumeRatio?.let { append(" | Vol: ${String.format("%.2f", it)}x") }
+                    entry.candlestickPattern?.let { append(" | Pattern: $it") }
+                    entry.availableBalance?.let { append(" | Avail: €${String.format("%.2f", it)}") }
+                },
+                style = detailStyle,
+                color = detailColor
             )
         }
     }

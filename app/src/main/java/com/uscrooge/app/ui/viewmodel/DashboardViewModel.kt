@@ -32,8 +32,11 @@ class DashboardViewModel @Inject constructor(
             try {
                 _uiState.value = DashboardUiState.Loading
 
+                // Sync positions from Kraken before loading local data
+                val config = configRepository.configFlow.first()
+                repository.syncOpenPositionsFromKraken(config)
+
                 repository.getOpenPositions().collect { positions ->
-                    val config = configRepository.configFlow.first()
                     val portfolio = repository.getPortfolio(config)
                     _uiState.value = DashboardUiState.Success(portfolio, positions)
                 }

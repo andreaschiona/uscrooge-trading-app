@@ -374,10 +374,14 @@ class KrakenApiClient(
                     return Result.failure(Exception(body.error.joinToString()))
                 }
 
-                val orderId = body.result?.txid?.firstOrNull()
-                    ?: return Result.failure(Exception("No order ID returned"))
-
-                Result.success(orderId)
+                if (validate) {
+                    // Validation-only call: Kraken does not return txid
+                    Result.success("validate")
+                } else {
+                    val orderId = body.result?.txid?.firstOrNull()
+                        ?: return Result.failure(Exception("No order ID returned"))
+                    Result.success(orderId)
+                }
             } else {
                 Result.failure(Exception("API error: ${response.code()}"))
             }
@@ -398,6 +402,46 @@ class KrakenApiClient(
                 }
 
                 Result.success(true)
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getOpenPositions(): Result<Map<String, PositionInfo>> {
+        return try {
+            val nonce = nextNonce()
+            val response = getApiService().getOpenPositions(nonce)
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return Result.failure(Exception(body.error.joinToString()))
+                }
+
+                Result.success(body.result ?: emptyMap())
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getTradesHistory(start: Long? = null, end: Long? = null): Result<Map<String, TradeInfo>> {
+        return try {
+            val nonce = nextNonce()
+            val response = getApiService().getTradesHistory(nonce, start = start, end = end)
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return Result.failure(Exception(body.error.joinToString()))
+                }
+
+                Result.success(body.result?.trades ?: emptyMap())
             } else {
                 Result.failure(Exception("API error: ${response.code()}"))
             }

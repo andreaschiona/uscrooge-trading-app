@@ -14,13 +14,6 @@ class TradingConfigTest {
     }
 
     @Test
-    fun `invalid budget fails validation`() {
-        val config = TradingConfig(budgetEur = -100.0)
-        val result = config.validate()
-        assertTrue("Negative budget should fail", result.isFailure)
-    }
-
-    @Test
     fun `invalid risk per trade fails validation`() {
         val config = TradingConfig(riskPerTrade = 1.5)
         val result = config.validate()
@@ -37,10 +30,9 @@ class TradingConfigTest {
     @Test
     fun `getMaxAmountPerTrade calculates correctly`() {
         val config = TradingConfig(
-            budgetEur = 1000.0,
             riskPerTrade = 0.25
         )
-        assertEquals(250.0, config.getMaxAmountPerTrade(), 0.01)
+        assertEquals(250.0, config.getMaxAmountPerTrade(1000.0), 0.01)
     }
 
     @Test

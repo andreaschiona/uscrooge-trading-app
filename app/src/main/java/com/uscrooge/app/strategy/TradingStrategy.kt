@@ -8,6 +8,11 @@ import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.min
 
+data class SignalResult(
+    val signal: TradingSignal?,
+    val analysis: TechnicalAnalysis
+)
+
 @Singleton
 class TradingStrategy @Inject constructor(
     private val analyzer: TechnicalAnalyzer
@@ -28,13 +33,14 @@ class TradingStrategy @Inject constructor(
         pair: String,
         ohlcData: List<OHLC>,
         currentPrice: Double,
-        currentPositions: List<Position> = emptyList()
-    ): TradingSignal? {
+        currentPositions: List<Position> = emptyList(),
+        availableBalance: Double = 0.0
+    ): SignalResult {
         // Perform technical analysis
         val analysis = analyzer.analyze(pair, ohlcData, currentPrice, config)
 
         if (config.useVolumeAnalysis && analysis.volume.volumeRatio < config.minVolumeRatio) {
-            return null
+            return SignalResult(signal = null, analysis = analysis)
         }
 
         // Calculate signal strength
@@ -45,26 +51,26 @@ class TradingStrategy @Inject constructor(
 
         // Check if we should generate a signal
         if (signalType == SignalType.HOLD || strength.overall < config.minSignalStrength) {
-            return null
+            return SignalResult(signal = null, analysis = analysis)
         }
 
         // Check if we already have a position for this pair
         val existingPosition = currentPositions.find { it.pair == pair && it.isOpen }
         if (signalType == SignalType.BUY && existingPosition != null) {
             // Already have a position, don't buy more
-            return null
+            return SignalResult(signal = null, analysis = analysis)
         }
 
         if (signalType == SignalType.SELL && existingPosition == null) {
             // No position to sell
-            return null
+            return SignalResult(signal = null, analysis = analysis)
         }
 
         // Check position limits
         if (signalType == SignalType.BUY) {
             val openPositionsCount = currentPositions.count { it.isOpen }
             if (openPositionsCount >= config.maxOpenPositions) {
-                return null
+                return SignalResult(signal = null, analysis = analysis)
             }
         }
 
@@ -80,11 +86,12 @@ class TradingStrategy @Inject constructor(
             signalType = signalType,
             currentPrice = currentPrice,
             strength = strength.overall,
-            existingPosition = existingPosition
+            existingPosition = existingPosition,
+            availableBalance = availableBalance
         )
 
         if (suggestedAmount <= 0) {
-            return null
+            return SignalResult(signal = null, analysis = analysis)
         }
 
         // Calculate risk/reward ratio
@@ -101,19 +108,22 @@ class TradingStrategy @Inject constructor(
         // Build reasons list
         val reasons = buildReasonsList(analysis, strength)
 
-        return TradingSignal(
-            pair = pair,
-            type = signalType,
-            strength = strength.overall,
-            currentPrice = currentPrice,
-            suggestedPrice = entryPrice,
-            stopLoss = stopLoss,
-            takeProfit = takeProfit,
-            suggestedAmount = suggestedAmount,
-            riskRewardRatio = riskRewardRatio,
-            timestamp = System.currentTimeMillis(),
-            reasons = Gson().toJson(reasons),
-            status = SignalStatus.PENDING
+        return SignalResult(
+            signal = TradingSignal(
+                pair = pair,
+                type = signalType,
+                strength = strength.overall,
+                currentPrice = currentPrice,
+                suggestedPrice = entryPrice,
+                stopLoss = stopLoss,
+                takeProfit = takeProfit,
+                suggestedAmount = suggestedAmount,
+                riskRewardRatio = riskRewardRatio,
+                timestamp = System.currentTimeMillis(),
+                reasons = Gson().toJson(reasons),
+                status = SignalStatus.PENDING
+            ),
+            analysis = analysis
         )
     }
 
@@ -226,12 +236,13 @@ class TradingStrategy @Inject constructor(
         signalType: SignalType,
         currentPrice: Double,
         strength: Double,
-        existingPosition: Position?
+        existingPosition: Position?,
+        availableBalance: Double
     ): Double {
         return when (signalType) {
             SignalType.BUY -> {
                 // Calculate base position size
-                val baseAmount = config.getMaxAmountPerTrade()
+                val baseAmount = config.getMaxAmountPerTrade(availableBalance)
 
                 // Scale by signal strength
                 val scaledAmount = baseAmount * (0.5 + (strength * 0.5))
@@ -243,8 +254,8 @@ class TradingStrategy @Inject constructor(
                     scaledAmount
                 }
 
-                // Make sure we don't exceed budget
-                min(adjustedAmount, config.budgetEur)
+                // Make sure we don't exceed available balance
+                min(adjustedAmount, availableBalance)
             }
 
             SignalType.SELL -> {

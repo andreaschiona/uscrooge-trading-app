@@ -128,22 +128,10 @@ fun SettingsScreen(
                     }
                 }
 
-                // Budget & Risk Section
+                // Risk Section
                 item {
-                    SettingsSection(title = "Budget & Risk Management") {
+                    SettingsSection(title = "Risk Management") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedTextField(
-                                value = currentConfig.budgetEur.toString(),
-                                onValueChange = { value ->
-                                    value.toDoubleOrNull()?.let {
-                                        editedConfig = currentConfig.copy(budgetEur = it)
-                                    }
-                                },
-                                label = { Text("Budget (EUR)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
                             OutlinedTextField(
                                 value = (currentConfig.riskPerTrade * 100).toString(),
                                 onValueChange = { value ->
@@ -154,7 +142,7 @@ fun SettingsScreen(
                                 label = { Text("Risk Per Trade (%)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier.fillMaxWidth(),
-                                supportingText = { Text("Percentage of budget per trade") }
+                                supportingText = { Text("Percentage of available balance per trade") }
                             )
 
                             OutlinedTextField(

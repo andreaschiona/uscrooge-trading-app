@@ -3,7 +3,7 @@
 ## Repository shape
 - Single-module Android app (`:app`) using Kotlin + Jetpack Compose; no monorepo/package boundaries (`settings.gradle.kts`).
 - Main runtime wiring starts in `app/src/main/java/com/uscrooge/app/UScroogeApplication.kt` and UI entry is `app/src/main/java/com/uscrooge/app/MainActivity.kt`.
-- Core flow: `MarketAnalysisWorker` -> `TradingRepository.analyzeAllPairs` -> `TradingStrategy.generateSignal` -> optional `OrderExecutor.executeSignal`.
+- Core flow: `MarketAnalysisWorker` -> exit monitoring -> circuit breaker check -> `TradingRepository.analyzeAllPairs` -> `TradingStrategy.generateSignal` -> optional `OrderExecutor.executeSignal` -> protective orders on exchange.
 
 ## Verified build/test commands
 - Windows: use `./gradlew.bat`; Unix/macOS: `./gradlew`.
@@ -23,6 +23,18 @@
 - Room uses `fallbackToDestructiveMigration()`; schema changes without migrations will wipe local DB data.
 - Background analysis is scheduled via WorkManager unique periodic work name `market_analysis_work`; rescheduling uses `ExistingPeriodicWorkPolicy.REPLACE`.
 
+## Key architectural components
+- `CircuitBreaker`: halts trading on max daily drawdown, consecutive failures, or max daily trades. Configurable cooldown.
+- `OrderExecutor.monitorExitConditions()`: evaluates stop-loss, take-profit, trailing stop on every Worker cycle.
+- Protective orders: after each BUY, stop-loss and take-profit orders are placed directly on Kraken as safety net.
+- `BrokerRegistry.applyConfig()`: propagates config changes to KrakenApiClient, TradingStrategy, and OrderExecutor.
+
+## CI/CD
+- **Release workflow** (`.github/workflows/release.yml`): on push to `main`, runs tests, bumps patch version, builds signed release APK, creates GitHub Release with APK attached.
+- **OpenCode workflow** (`.github/workflows/opencode.yml`): responds to issue/PR comments via opencode agent.
+
 ## High-impact implementation gotchas
-- `UScroogeApplication` initializes `KrakenApiClient`, `TradingStrategy`, and `OrderExecutor` with default/empty config values and does not rebuild them when `ConfigRepository` updates. Do not assume Settings changes are automatically reflected in those instances.
-- `OrderExecutor.updatePositionPrices()` collects a Flow indefinitely; calling it from a Worker (`MarketAnalysisWorker.doWork`) can keep work running longer than expected.
+- `OrderExecutor.updatePositionPrices()` uses `positionDao.getOpenPositions().first()` (single snapshot). This is safe in Worker context.
+- Room uses destructive migration: any schema change (adding columns to entities) wipes DB. Use proper migrations for production data preservation.
+- `Position.peakPrice` tracks the highest price since entry for trailing stop. It must be updated via `calculateCurrentValue()` on every price refresh.
+- Kraken `stop-loss` and `take-profit` order types require the `price` parameter (trigger price).

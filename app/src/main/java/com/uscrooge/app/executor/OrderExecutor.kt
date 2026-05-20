@@ -100,12 +100,21 @@ class OrderExecutor @Inject constructor(
         // Calculate volume in base currency
         val volume = signal.suggestedAmount / currentPrice
 
+        // Determine order type: MARKET for strong/urgent signals, LIMIT for moderate signals
+        val useLimit = config.useLimitOrders && signal.strength < config.strongSignalThreshold
+        val orderType = if (useLimit) OrderType.LIMIT else OrderType.MARKET
+        val limitPrice = if (useLimit) {
+            // Place limit slightly below current ask for better fill
+            currentPrice * 0.999
+        } else null
+
         // Validate order
         val validateResult = apiClient.addOrder(
             pair = pair,
             type = OrderSide.BUY,
             volume = volume,
-            orderType = OrderType.MARKET,
+            orderType = orderType,
+            price = limitPrice,
             validate = true
         )
 
@@ -118,7 +127,8 @@ class OrderExecutor @Inject constructor(
             pair = pair,
             type = OrderSide.BUY,
             volume = volume,
-            orderType = OrderType.MARKET,
+            orderType = orderType,
+            price = limitPrice,
             validate = false
         )
 
@@ -131,17 +141,19 @@ class OrderExecutor @Inject constructor(
         // Wait a bit for order to be processed
         delay(2000)
 
+        val executionPrice = limitPrice ?: currentPrice
+
         // Create order record
         val order = Order(
             orderId = orderId,
             pair = signal.pair,
-            type = OrderType.MARKET,
+            type = orderType,
             side = OrderSide.BUY,
-            price = currentPrice,
+            price = executionPrice,
             amount = volume,
             cost = signal.suggestedAmount,
             fee = signal.suggestedAmount * 0.0026,  // Kraken's typical fee
-            status = OrderStatus.OPEN,
+            status = if (useLimit) OrderStatus.OPEN else OrderStatus.OPEN,
             createdAt = System.currentTimeMillis(),
             executedAt = System.currentTimeMillis(),
             signalId = signal.id
@@ -162,11 +174,11 @@ class OrderExecutor @Inject constructor(
                 amount = newAmount,
                 averageEntryPrice = newAveragePrice,
                 totalInvested = newTotalInvested,
-                currentPrice = currentPrice,
-                peakPrice = maxOf(existingPosition.peakPrice, currentPrice),
-                currentValue = newAmount * currentPrice,
-                unrealizedPnL = (newAmount * currentPrice) - newTotalInvested,
-                unrealizedPnLPercent = (((newAmount * currentPrice) - newTotalInvested) / newTotalInvested) * 100,
+                currentPrice = executionPrice,
+                peakPrice = maxOf(existingPosition.peakPrice, executionPrice),
+                currentValue = newAmount * executionPrice,
+                unrealizedPnL = (newAmount * executionPrice) - newTotalInvested,
+                unrealizedPnLPercent = (((newAmount * executionPrice) - newTotalInvested) / newTotalInvested) * 100,
                 updatedAt = System.currentTimeMillis()
             )
 
@@ -179,11 +191,11 @@ class OrderExecutor @Inject constructor(
             val position = Position(
                 pair = signal.pair,
                 amount = volume,
-                averageEntryPrice = currentPrice,
-                currentPrice = currentPrice,
-                peakPrice = currentPrice,
+                averageEntryPrice = executionPrice,
+                currentPrice = executionPrice,
+                peakPrice = executionPrice,
                 totalInvested = signal.suggestedAmount,
-                currentValue = volume * currentPrice,
+                currentValue = volume * executionPrice,
                 unrealizedPnL = 0.0,
                 unrealizedPnLPercent = 0.0,
                 openedAt = System.currentTimeMillis(),
@@ -203,7 +215,7 @@ class OrderExecutor @Inject constructor(
             signal.copy(
                 status = SignalStatus.EXECUTED,
                 executedAt = System.currentTimeMillis(),
-                executedPrice = currentPrice,
+                executedPrice = executionPrice,
                 orderId = orderId
             )
         )

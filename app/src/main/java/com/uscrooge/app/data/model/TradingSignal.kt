@@ -53,6 +53,9 @@ data class SignalStrength(
     val volumeScore: Double,
     val patternScore: Double,
     val trendScore: Double,
+    val bollingerScore: Double = 0.5,
+    val adxScore: Double = 0.5,
+    val stochRsiScore: Double = 0.5,
     val overall: Double
 ) {
     companion object {
@@ -62,15 +65,31 @@ data class SignalStrength(
             val volumeScore = calculateVolumeScore(analysis.volume)
             val patternScore = analysis.candlestickPattern?.strength ?: 0.5
             val trendScore = calculateTrendScore(analysis.trend)
+            val bollingerScore = calculateBollingerScore(analysis.bollingerBands)
+            val adxScore = calculateADXScore(analysis.adx)
+            val stochRsiScore = calculateStochRSIScore(analysis.stochasticRSI)
 
-            // Weighted average
-            val overall = (
+            val hasNewIndicators = analysis.bollingerBands != null ||
+                    analysis.adx != null || analysis.stochasticRSI != null
+
+            val overall = if (hasNewIndicators) {
+                // Adjusted weights when new indicators are available
+                rsiScore * 0.20 +
+                macdScore * 0.20 +
+                volumeScore * 0.10 +
+                patternScore * 0.10 +
+                trendScore * 0.15 +
+                bollingerScore * 0.10 +
+                adxScore * 0.08 +
+                stochRsiScore * 0.07
+            } else {
+                // Original weights for backward compatibility
                 rsiScore * 0.25 +
                 macdScore * 0.25 +
                 volumeScore * 0.15 +
                 patternScore * 0.15 +
                 trendScore * 0.20
-            )
+            }
 
             return SignalStrength(
                 rsiScore = rsiScore,
@@ -78,6 +97,9 @@ data class SignalStrength(
                 volumeScore = volumeScore,
                 patternScore = patternScore,
                 trendScore = trendScore,
+                bollingerScore = bollingerScore,
+                adxScore = adxScore,
+                stochRsiScore = stochRsiScore,
                 overall = overall
             )
         }
@@ -119,6 +141,37 @@ data class SignalStrength(
                 Trend.SIDEWAYS -> 0.5
                 Trend.DOWNTREND -> 0.25
                 Trend.STRONG_DOWNTREND -> 0.0
+            }
+        }
+
+        private fun calculateBollingerScore(bb: BollingerBands?): Double {
+            if (bb == null) return 0.5
+            return when (bb.signal) {
+                BollingerBands.Signal.BELOW_LOWER -> 1.0
+                BollingerBands.Signal.NEAR_LOWER -> 0.8
+                BollingerBands.Signal.MIDDLE -> 0.5
+                BollingerBands.Signal.NEAR_UPPER -> 0.2
+                BollingerBands.Signal.ABOVE_UPPER -> 0.0
+            }
+        }
+
+        private fun calculateADXScore(adx: ADX?): Double {
+            if (adx == null) return 0.5
+            return when (adx.signal) {
+                ADX.Signal.STRONG_TREND -> 0.9
+                ADX.Signal.MODERATE_TREND -> 0.5
+                ADX.Signal.WEAK_TREND -> 0.2
+            }
+        }
+
+        private fun calculateStochRSIScore(stochRsi: StochasticRSI?): Double {
+            if (stochRsi == null) return 0.5
+            return when (stochRsi.signal) {
+                StochasticRSI.Signal.OVERSOLD -> 1.0
+                StochasticRSI.Signal.BULLISH -> 0.7
+                StochasticRSI.Signal.NEUTRAL -> 0.5
+                StochasticRSI.Signal.BEARISH -> 0.3
+                StochasticRSI.Signal.OVERBOUGHT -> 0.0
             }
         }
     }

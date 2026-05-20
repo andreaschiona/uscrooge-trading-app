@@ -4,6 +4,7 @@ import com.uscrooge.app.data.model.*
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 class TechnicalAnalyzer {
 
@@ -34,6 +35,18 @@ class TechnicalAnalyzer {
             findSupportResistance(ohlcData)
         } else Pair(null, null)
 
+        val bollingerBands = if (closePrices.size >= 20) {
+            calculateBollingerBands(closePrices)
+        } else null
+
+        val adx = if (ohlcData.size >= 28) {
+            calculateADX(ohlcData)
+        } else null
+
+        val stochasticRSI = if (closePrices.size >= 28) {
+            calculateStochasticRSI(closePrices)
+        } else null
+
         return TechnicalAnalysis(
             pair = pair,
             timestamp = System.currentTimeMillis(),
@@ -44,7 +57,10 @@ class TechnicalAnalyzer {
             candlestickPattern = candlestickPattern,
             trend = trend,
             support = support,
-            resistance = resistance
+            resistance = resistance,
+            bollingerBands = bollingerBands,
+            adx = adx,
+            stochasticRSI = stochasticRSI
         )
     }
 
@@ -328,5 +344,156 @@ class TechnicalAnalyzer {
         }
 
         return extrema.lastOrNull()
+    }
+
+    fun calculateBollingerBands(
+        prices: List<Double>,
+        period: Int = 20,
+        stdDev: Double = 2.0
+    ): BollingerBands {
+        require(prices.size >= period) { "Not enough data for Bollinger Bands" }
+
+        val recentPrices = prices.takeLast(period)
+        val middle = recentPrices.average()
+        val variance = recentPrices.sumOf { (it - middle) * (it - middle) } / period
+        val sd = sqrt(variance)
+
+        val upper = middle + stdDev * sd
+        val lower = middle - stdDev * sd
+        val bandwidth = if (middle > 0) (upper - lower) / middle else 0.0
+        val currentPrice = prices.last()
+        val percentB = if (upper - lower > 0) (currentPrice - lower) / (upper - lower) else 0.5
+
+        return BollingerBands(
+            upper = upper,
+            middle = middle,
+            lower = lower,
+            bandwidth = bandwidth,
+            percentB = percentB
+        )
+    }
+
+    fun calculateADX(ohlcData: List<OHLC>, period: Int = 14): ADX {
+        require(ohlcData.size >= period * 2) { "Not enough data for ADX calculation" }
+
+        val trueRanges = mutableListOf<Double>()
+        val plusDMs = mutableListOf<Double>()
+        val minusDMs = mutableListOf<Double>()
+
+        for (i in 1 until ohlcData.size) {
+            val current = ohlcData[i]
+            val previous = ohlcData[i - 1]
+
+            val highDiff = current.high - previous.high
+            val lowDiff = previous.low - current.low
+
+            val plusDM = if (highDiff > lowDiff && highDiff > 0) highDiff else 0.0
+            val minusDM = if (lowDiff > highDiff && lowDiff > 0) lowDiff else 0.0
+
+            val tr = maxOf(
+                current.high - current.low,
+                abs(current.high - previous.close),
+                abs(current.low - previous.close)
+            )
+
+            trueRanges.add(tr)
+            plusDMs.add(plusDM)
+            minusDMs.add(minusDM)
+        }
+
+        // Smooth using Wilder's method
+        var smoothedTR = trueRanges.take(period).sum()
+        var smoothedPlusDM = plusDMs.take(period).sum()
+        var smoothedMinusDM = minusDMs.take(period).sum()
+
+        val dxValues = mutableListOf<Double>()
+
+        for (i in period until trueRanges.size) {
+            smoothedTR = smoothedTR - (smoothedTR / period) + trueRanges[i]
+            smoothedPlusDM = smoothedPlusDM - (smoothedPlusDM / period) + plusDMs[i]
+            smoothedMinusDM = smoothedMinusDM - (smoothedMinusDM / period) + minusDMs[i]
+
+            val plusDI = if (smoothedTR > 0) (smoothedPlusDM / smoothedTR) * 100 else 0.0
+            val minusDI = if (smoothedTR > 0) (smoothedMinusDM / smoothedTR) * 100 else 0.0
+
+            val diSum = plusDI + minusDI
+            val dx = if (diSum > 0) (abs(plusDI - minusDI) / diSum) * 100 else 0.0
+            dxValues.add(dx)
+        }
+
+        val adxValue = if (dxValues.size >= period) {
+            // Smooth ADX
+            var adx = dxValues.take(period).average()
+            for (i in period until dxValues.size) {
+                adx = ((adx * (period - 1)) + dxValues[i]) / period
+            }
+            adx
+        } else {
+            dxValues.average()
+        }
+
+        // Get final +DI and -DI
+        val finalPlusDI = if (smoothedTR > 0) (smoothedPlusDM / smoothedTR) * 100 else 0.0
+        val finalMinusDI = if (smoothedTR > 0) (smoothedMinusDM / smoothedTR) * 100 else 0.0
+
+        return ADX(
+            value = adxValue,
+            plusDI = finalPlusDI,
+            minusDI = finalMinusDI
+        )
+    }
+
+    fun calculateStochasticRSI(
+        prices: List<Double>,
+        rsiPeriod: Int = 14,
+        stochPeriod: Int = 14,
+        kPeriod: Int = 3,
+        dPeriod: Int = 3
+    ): StochasticRSI {
+        require(prices.size >= rsiPeriod + stochPeriod) { "Not enough data for Stochastic RSI" }
+
+        // Calculate RSI series
+        val rsiValues = mutableListOf<Double>()
+        for (i in rsiPeriod until prices.size) {
+            val slice = prices.subList(0, i + 1)
+            val rsi = calculateRSI(slice, rsiPeriod)
+            rsiValues.add(rsi.value)
+        }
+
+        if (rsiValues.size < stochPeriod) {
+            return StochasticRSI(k = 50.0, d = 50.0)
+        }
+
+        // Calculate Stochastic of RSI
+        val stochKValues = mutableListOf<Double>()
+        for (i in (stochPeriod - 1) until rsiValues.size) {
+            val window = rsiValues.subList(i - stochPeriod + 1, i + 1)
+            val lowestRSI = window.min()
+            val highestRSI = window.max()
+            val stochK = if (highestRSI - lowestRSI > 0) {
+                ((rsiValues[i] - lowestRSI) / (highestRSI - lowestRSI)) * 100
+            } else 50.0
+            stochKValues.add(stochK)
+        }
+
+        // Smooth K with SMA (kPeriod)
+        val smoothedK = if (stochKValues.size >= kPeriod) {
+            stochKValues.takeLast(kPeriod).average()
+        } else {
+            stochKValues.lastOrNull() ?: 50.0
+        }
+
+        // D is SMA of smoothed K values
+        val smoothedD = if (stochKValues.size >= kPeriod + dPeriod - 1) {
+            val kSmoothed = mutableListOf<Double>()
+            for (i in (kPeriod - 1) until stochKValues.size) {
+                kSmoothed.add(stochKValues.subList(i - kPeriod + 1, i + 1).average())
+            }
+            kSmoothed.takeLast(dPeriod).average()
+        } else {
+            smoothedK
+        }
+
+        return StochasticRSI(k = smoothedK, d = smoothedD)
     }
 }

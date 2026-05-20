@@ -42,6 +42,7 @@ class ConfigRepository(private val context: Context) {
         private val AUTOMATIC_TRADING = booleanPreferencesKey("automatic_trading")
         private val CHECK_INTERVAL_SECONDS = intPreferencesKey("check_interval_seconds")
         private val MAX_SLIPPAGE_PERCENT = doublePreferencesKey("max_slippage_percent")
+        private val USE_LIMIT_ORDERS = booleanPreferencesKey("use_limit_orders")
         private val KRAKEN_API_KEY = stringPreferencesKey("kraken_api_key")
         private val KRAKEN_API_SECRET = stringPreferencesKey("kraken_api_secret")
         private val API_TIMEOUT = longPreferencesKey("api_timeout")
@@ -90,6 +91,7 @@ class ConfigRepository(private val context: Context) {
                 automaticTrading = preferences[AUTOMATIC_TRADING] ?: false,
                 checkIntervalSeconds = preferences[CHECK_INTERVAL_SECONDS] ?: 300,
                 maxSlippagePercent = preferences[MAX_SLIPPAGE_PERCENT] ?: 0.5,
+                useLimitOrders = preferences[USE_LIMIT_ORDERS] ?: true,
                 krakenApiKey = preferences[KRAKEN_API_KEY] ?: "",
                 krakenApiSecret = preferences[KRAKEN_API_SECRET] ?: "",
                 apiTimeout = preferences[API_TIMEOUT] ?: 30000,
@@ -131,6 +133,7 @@ class ConfigRepository(private val context: Context) {
             preferences[AUTOMATIC_TRADING] = config.automaticTrading
             preferences[CHECK_INTERVAL_SECONDS] = config.checkIntervalSeconds
             preferences[MAX_SLIPPAGE_PERCENT] = config.maxSlippagePercent
+            preferences[USE_LIMIT_ORDERS] = config.useLimitOrders
             preferences[KRAKEN_API_KEY] = config.krakenApiKey
             preferences[KRAKEN_API_SECRET] = config.krakenApiSecret
             preferences[API_TIMEOUT] = config.apiTimeout

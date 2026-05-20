@@ -34,7 +34,8 @@ class TradingStrategy @Inject constructor(
         ohlcData: List<OHLC>,
         currentPrice: Double,
         currentPositions: List<Position> = emptyList(),
-        availableBalance: Double = 0.0
+        availableBalance: Double = 0.0,
+        higherTimeframeTrends: List<Trend> = emptyList()
     ): SignalResult {
         // Perform technical analysis
         val analysis = analyzer.analyze(pair, ohlcData, currentPrice, config)
@@ -47,7 +48,7 @@ class TradingStrategy @Inject constructor(
         val strength = SignalStrength.calculate(analysis)
 
         // Determine signal type
-        val signalType = determineSignalType(strength, analysis)
+        val signalType = determineSignalType(strength, analysis, higherTimeframeTrends)
 
         // Check if we should generate a signal
         if (signalType == SignalType.HOLD || strength.overall < config.minSignalStrength) {
@@ -129,7 +130,8 @@ class TradingStrategy @Inject constructor(
 
     private fun determineSignalType(
         strength: SignalStrength,
-        analysis: TechnicalAnalysis
+        analysis: TechnicalAnalysis,
+        higherTimeframeTrends: List<Trend> = emptyList()
     ): SignalType {
         var buyScore = 0.0
         var sellScore = 0.0
@@ -185,6 +187,65 @@ class TradingStrategy @Inject constructor(
                 sellScore *= 0.8
             }
             else -> {}
+        }
+
+        // Bollinger Bands signals
+        analysis.bollingerBands?.let { bb ->
+            when (bb.signal) {
+                BollingerBands.Signal.BELOW_LOWER -> buyScore += 1.0
+                BollingerBands.Signal.NEAR_LOWER -> buyScore += 0.5
+                BollingerBands.Signal.ABOVE_UPPER -> sellScore += 1.0
+                BollingerBands.Signal.NEAR_UPPER -> sellScore += 0.5
+                BollingerBands.Signal.MIDDLE -> {}
+            }
+        }
+
+        // ADX signals
+        analysis.adx?.let { adx ->
+            when (adx.signal) {
+                ADX.Signal.STRONG_TREND -> {
+                    // Boost the dominant direction
+                    if (buyScore > sellScore) buyScore += 0.5
+                    else if (sellScore > buyScore) sellScore += 0.5
+                }
+                ADX.Signal.WEAK_TREND -> {
+                    // Reduce confidence in ranging market
+                    buyScore *= 0.85
+                    sellScore *= 0.85
+                }
+                ADX.Signal.MODERATE_TREND -> {}
+            }
+        }
+
+        // Stochastic RSI signals
+        analysis.stochasticRSI?.let { stoch ->
+            when (stoch.signal) {
+                StochasticRSI.Signal.OVERSOLD -> buyScore += 0.75
+                StochasticRSI.Signal.BULLISH -> buyScore += 0.3
+                StochasticRSI.Signal.BEARISH -> sellScore += 0.3
+                StochasticRSI.Signal.OVERBOUGHT -> sellScore += 0.75
+                StochasticRSI.Signal.NEUTRAL -> {}
+            }
+        }
+
+        // Multi-timeframe confirmation filter
+        if (higherTimeframeTrends.isNotEmpty()) {
+            for (htfTrend in higherTimeframeTrends) {
+                when (htfTrend) {
+                    Trend.STRONG_DOWNTREND, Trend.DOWNTREND -> {
+                        // Higher TF bearish: penalize buy signals
+                        buyScore -= 1.5
+                    }
+                    Trend.STRONG_UPTREND, Trend.UPTREND -> {
+                        // Higher TF bullish: penalize sell signals
+                        sellScore -= 1.5
+                    }
+                    Trend.SIDEWAYS -> {}
+                }
+            }
+            // Clamp to zero
+            if (buyScore < 0) buyScore = 0.0
+            if (sellScore < 0) sellScore = 0.0
         }
 
         return when {
@@ -325,6 +386,43 @@ class TradingStrategy @Inject constructor(
             Trend.STRONG_DOWNTREND -> reasons.add("Strong downtrend detected")
             Trend.DOWNTREND -> reasons.add("Downtrend detected")
             Trend.SIDEWAYS -> reasons.add("Sideways market")
+        }
+
+        // Bollinger Bands
+        analysis.bollingerBands?.let { bb ->
+            when (bb.signal) {
+                BollingerBands.Signal.BELOW_LOWER ->
+                    reasons.add("Price below lower Bollinger Band - Potential reversal buy")
+                BollingerBands.Signal.NEAR_LOWER ->
+                    reasons.add("Price near lower Bollinger Band - Buy zone")
+                BollingerBands.Signal.ABOVE_UPPER ->
+                    reasons.add("Price above upper Bollinger Band - Potential reversal sell")
+                BollingerBands.Signal.NEAR_UPPER ->
+                    reasons.add("Price near upper Bollinger Band - Sell zone")
+                BollingerBands.Signal.MIDDLE -> {}
+            }
+        }
+
+        // ADX
+        analysis.adx?.let { adx ->
+            when (adx.signal) {
+                ADX.Signal.STRONG_TREND ->
+                    reasons.add("ADX ${String.format("%.1f", adx.value)} - Strong trend confirms signal")
+                ADX.Signal.WEAK_TREND ->
+                    reasons.add("ADX ${String.format("%.1f", adx.value)} - Weak trend, reduced confidence")
+                ADX.Signal.MODERATE_TREND -> {}
+            }
+        }
+
+        // Stochastic RSI
+        analysis.stochasticRSI?.let { stoch ->
+            when (stoch.signal) {
+                StochasticRSI.Signal.OVERSOLD ->
+                    reasons.add("Stochastic RSI oversold (K=${String.format("%.1f", stoch.k)}) - Buy confirmation")
+                StochasticRSI.Signal.OVERBOUGHT ->
+                    reasons.add("Stochastic RSI overbought (K=${String.format("%.1f", stoch.k)}) - Sell confirmation")
+                else -> {}
+            }
         }
 
         // Support/Resistance

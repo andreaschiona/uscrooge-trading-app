@@ -10,7 +10,10 @@ data class TechnicalAnalysis(
     val candlestickPattern: CandlestickPattern?,
     val trend: Trend,
     val support: Double?,
-    val resistance: Double?
+    val resistance: Double?,
+    val bollingerBands: BollingerBands? = null,
+    val adx: ADX? = null,
+    val stochasticRSI: StochasticRSI? = null
 )
 
 data class RSI(
@@ -110,4 +113,70 @@ enum class Trend {
     SIDEWAYS,
     DOWNTREND,
     STRONG_DOWNTREND
+}
+
+data class BollingerBands(
+    val upper: Double,
+    val middle: Double,
+    val lower: Double,
+    val bandwidth: Double,
+    val percentB: Double
+) {
+    val signal: Signal
+        get() = when {
+            percentB <= 0.0 -> Signal.BELOW_LOWER
+            percentB <= 0.2 -> Signal.NEAR_LOWER
+            percentB >= 1.0 -> Signal.ABOVE_UPPER
+            percentB >= 0.8 -> Signal.NEAR_UPPER
+            else -> Signal.MIDDLE
+        }
+
+    enum class Signal {
+        BELOW_LOWER,   // Strong buy
+        NEAR_LOWER,    // Buy signal
+        MIDDLE,        // Neutral
+        NEAR_UPPER,    // Sell signal
+        ABOVE_UPPER    // Strong sell
+    }
+}
+
+data class ADX(
+    val value: Double,
+    val plusDI: Double,
+    val minusDI: Double
+) {
+    val signal: Signal
+        get() = when {
+            value >= 25.0 -> Signal.STRONG_TREND
+            value < 20.0 -> Signal.WEAK_TREND
+            else -> Signal.MODERATE_TREND
+        }
+
+    enum class Signal {
+        STRONG_TREND,    // ADX > 25, trend is strong
+        MODERATE_TREND,  // ADX 20-25
+        WEAK_TREND       // ADX < 20, ranging market
+    }
+}
+
+data class StochasticRSI(
+    val k: Double,
+    val d: Double
+) {
+    val signal: Signal
+        get() = when {
+            k <= 20.0 && d <= 20.0 -> Signal.OVERSOLD
+            k <= 30.0 -> Signal.BULLISH
+            k >= 80.0 && d >= 80.0 -> Signal.OVERBOUGHT
+            k >= 70.0 -> Signal.BEARISH
+            else -> Signal.NEUTRAL
+        }
+
+    enum class Signal {
+        OVERSOLD,      // Strong buy
+        BULLISH,       // Moderate buy
+        NEUTRAL,
+        BEARISH,       // Moderate sell
+        OVERBOUGHT     // Strong sell
+    }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
@@ -38,6 +39,7 @@ class TradingRepository @Inject constructor(
 
     private val gson = Gson()
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val technicalAnalyzer = TechnicalAnalyzer()
 
     private val _lastAnalysisLog = MutableStateFlow<AnalysisLog?>(null)
     val lastAnalysisLog: StateFlow<AnalysisLog?> = _lastAnalysisLog.asStateFlow()
@@ -232,6 +234,13 @@ class TradingRepository @Inject constructor(
 
             val currentPrice = tickerResult.getOrNull()!!.lastTrade
 
+            // Multi-timeframe trend analysis
+            val higherTimeframeTrends = if (config.useMultiTimeframe) {
+                fetchHigherTimeframeTrends(tradingPair, config)
+            } else {
+                emptyList()
+            }
+
             // Get current positions
             val currentPositions = positionDao.getOpenPositions().first()
 
@@ -241,7 +250,8 @@ class TradingRepository @Inject constructor(
                 ohlcData = ohlcData,
                 currentPrice = currentPrice,
                 currentPositions = currentPositions,
-                availableBalance = availableBalance
+                availableBalance = availableBalance,
+                higherTimeframeTrends = higherTimeframeTrends
             )
 
             signalResult.signal?.let { insertSignal(it) }
@@ -250,6 +260,43 @@ class TradingRepository @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun fetchHigherTimeframeTrends(
+        pair: TradingPair,
+        config: TradingConfig
+    ): List<Trend> {
+        val trends = mutableListOf<Trend>()
+
+        // Fetch secondary timeframe
+        try {
+            val secondaryResult = apiClient.getOHLC(pair, config.secondaryTimeframe)
+            if (secondaryResult.isSuccess) {
+                val data = secondaryResult.getOrNull()!!
+                if (data.size >= 10) {
+                    val prices = data.map { it.close }
+                    trends.add(technicalAnalyzer.detectTrend(prices))
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch secondary timeframe for ${pair.base}: ${e.message}")
+        }
+
+        // Fetch tertiary timeframe
+        try {
+            val tertiaryResult = apiClient.getOHLC(pair, config.tertiaryTimeframe)
+            if (tertiaryResult.isSuccess) {
+                val data = tertiaryResult.getOrNull()!!
+                if (data.size >= 10) {
+                    val prices = data.map { it.close }
+                    trends.add(technicalAnalyzer.detectTrend(prices))
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch tertiary timeframe for ${pair.base}: ${e.message}")
+        }
+
+        return trends
     }
 
     suspend fun analyzeAllPairs(config: TradingConfig): List<TradingSignal> {

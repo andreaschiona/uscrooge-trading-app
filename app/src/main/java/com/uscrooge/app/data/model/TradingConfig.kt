@@ -30,6 +30,7 @@ data class TradingConfig(
     val automaticTrading: Boolean = false,     // Require confirmation
     val checkIntervalSeconds: Int = 300,       // Check every 5 minutes
     val maxSlippagePercent: Double = 0.5,     // Max 0.5% slippage
+    val useLimitOrders: Boolean = true,        // Use limit orders for non-urgent signals
 
     // API Configuration
     val krakenApiKey: String = "",

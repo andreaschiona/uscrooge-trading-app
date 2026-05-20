@@ -1,147 +1,158 @@
 # UScrooge Trading App
 
-Applicazione Android (Kotlin + Jetpack Compose) per analisi tecnica e trading crypto su Kraken.
+An Android application for automated cryptocurrency trading on Kraken, built with Kotlin and Jetpack Compose. UScrooge analyzes market conditions using multi-indicator technical analysis and executes trades autonomously to maximize capital returns.
 
-## Panoramica
+## Features
 
-- Architettura a strati con UI Compose, ViewModel, strategy engine, repository, Room e API Kraken.
-- Flusso principale: `MarketAnalysisWorker` -> `TradingRepository.analyzeAllPairs` -> `TradingStrategy.generateSignal` -> eventuale `OrderExecutor.executeSignal`.
-- Analisi tecnica multi-indicatore: RSI, MACD, volume, trend, pattern candlestick, livelli di supporto/resistenza.
-- Modalita operative: esecuzione manuale (default) o automatica per segnali sopra soglia.
-- Persistenza: Room (`uscrooge_database`) + DataStore (`trading_config`).
+- **Automated Trading** - Fully autonomous trade execution based on configurable signal strength thresholds
+- **Multi-Indicator Strategy** - RSI, MACD, Bollinger Bands, ADX, Stochastic RSI, volume analysis, candlestick patterns, support/resistance
+- **Multi-Timeframe Confirmation** - Signals validated against higher timeframe trends (1h, 4h, daily) to reduce false entries
+- **Smart Order Execution** - Limit orders for moderate signals (lower fees), market orders for strong signals (immediate fill)
+- **Real-Time WebSocket Streaming** - Live price updates via Kraken WebSocket v2 API
+- **Circuit Breaker** - Automatic trading halt on max daily drawdown, consecutive failures, or daily trade limit
+- **Active Exit Monitoring** - Stop-loss, take-profit, and trailing stop evaluated every cycle
+- **Exchange-Level Protection** - Stop-loss and take-profit orders placed directly on Kraken as safety net
+- **Configurable Risk Management** - Position sizing, max open positions, slippage guards, and more
+- **Push Notifications** - Real-time alerts for signals, executions, and errors
 
-## Funzionalita principali
+## Trading Strategy
 
-- Dashboard portfolio con P/L, posizioni aperte e aggiornamenti periodici.
-- Schermata segnali con motivazioni, livello di forza e azioni Execute/Ignore.
-- Configurazione completa da Settings: coppie, rischio, soglie, API Kraken, notifiche.
-- Worker periodico WorkManager (unique work `market_analysis_work`) per analisi e notifiche.
-- Gestione rischio con stop loss, take profit, trailing stop, limiti posizioni/trade.
+UScrooge uses a composite scoring system that combines multiple technical indicators:
 
-## Requisiti ambiente
+| Indicator | Weight | Signal |
+|-----------|--------|--------|
+| RSI (14) | 20% | Oversold <30 = buy, Overbought >70 = sell |
+| MACD (12/26/9) | 20% | Crossover detection and momentum direction |
+| Bollinger Bands (20, 2σ) | 10% | Price near lower band = buy, upper = sell |
+| ADX (14) | 10% | >25 confirms trend, <20 reduces confidence |
+| Stochastic RSI | 10% | <20 = buy confirmation, >80 = sell confirmation |
+| Volume | 10% | Above average confirms, below average weakens |
+| Candlestick Patterns | 10% | Hammer, Engulfing, Morning/Evening Star, etc. |
+| Trend | 10% | 20-period directional analysis |
 
-- Android Studio Hedgehog o superiore.
-- JDK 17 (obbligatorio).
-- Android SDK 34.
-- AGP `8.2.0`, Kotlin `1.9.20`, Gradle `8.2`.
-- `local.properties` locale con `sdk.dir=...` (non committare).
+**Signal generation requires:**
+- Score >= 3.0 from buy/sell scoring
+- Overall strength >= 65% (configurable)
+- Auto-execution requires >= 80% strength
+- Higher timeframe trend confirmation (when enabled)
 
-Se Gradle fallisce con `IllegalArgumentException: 25.0.3`, il processo sta usando una JDK non supportata: passare a JDK 17.
+**Risk controls:**
+- Default 2% stop-loss, 4% take-profit (2:1 R/R ratio)
+- 1.5% trailing stop from peak price
+- Max 25% of available balance per trade
+- Max 3 concurrent positions, 5 trades/day
+- Circuit breaker: halts on 5% daily drawdown or 3 consecutive failures
 
-## Build e test
+## Project Structure
 
-Su Windows usare `gradlew.bat`; su macOS/Linux usare `./gradlew`.
-
-```powershell
-# Windows
-./gradlew.bat assembleDebug
-./gradlew.bat assembleRelease
-./gradlew.bat test
-
-# Esempi test mirati
-./gradlew.bat :app:testDebugUnitTest --tests "com.uscrooge.app.TechnicalAnalyzerTest"
-./gradlew.bat :app:testDebugUnitTest --tests "com.uscrooge.app.TechnicalAnalyzerTest.RSI calculation with oversold condition"
+```
+app/src/main/java/com/uscrooge/app/
+├── UScroogeApplication.kt          # Application entry point
+├── MainActivity.kt                 # Compose UI entry
+├── analysis/
+│   └── TechnicalAnalyzer.kt        # All indicator calculations
+├── data/
+│   ├── api/
+│   │   ├── KrakenApiClient.kt      # REST API client (public + private)
+│   │   ├── KrakenApiService.kt     # Retrofit interface
+│   │   ├── KrakenAuthInterceptor.kt # HMAC-SHA512 authentication
+│   │   └── KrakenWebSocketClient.kt # Real-time WebSocket streaming
+│   ├── local/
+│   │   ├── TradingDao.kt           # Room DAOs
+│   │   └── TradingDatabase.kt      # Room database
+│   ├── model/                      # Data classes and enums
+│   └── repository/
+│       ├── ConfigRepository.kt     # DataStore preferences
+│       └── TradingRepository.kt    # Market data + signal orchestration
+├── di/
+│   ├── ApiModule.kt                # Hilt DI module
+│   ├── AppModule.kt                # App-wide providers
+│   └── BrokerRegistry.kt          # Config propagation to all components
+├── executor/
+│   ├── CircuitBreaker.kt           # Trading halt logic
+│   └── OrderExecutor.kt           # Order placement + exit monitoring
+├── notification/
+│   └── NotificationHelper.kt      # Push notifications
+├── strategy/
+│   └── TradingStrategy.kt         # Signal generation + exit conditions
+├── ui/                            # Compose screens (Dashboard, Signals, Settings)
+└── worker/
+    └── MarketAnalysisWorker.kt    # Background periodic analysis
 ```
 
-Output APK:
+## CI/CD
 
-- Debug: `app/build/outputs/apk/debug/app-debug.apk`
-- Release: `app/build/outputs/apk/release/app-release.apk`
+The project uses GitHub Actions for continuous delivery:
 
-## Firma release e aggiornamenti senza perdita dati
+### Release Workflow (`.github/workflows/release.yml`)
+Triggered on every push to `main`:
+1. Runs unit tests (creates GitHub issue on failure)
+2. Increments patch version automatically
+3. Builds signed release APK
+4. Commits version bump
+5. Creates a GitHub Release with the APK attached
 
-Per installare gli aggiornamenti sopra una versione gia presente (senza disinstallare) e mantenere configurazioni/DataStore/DB, l'APK deve essere firmato con la stessa chiave ad ogni release.
+### OpenCode Workflow (`.github/workflows/opencode.yml`)
+Responds to issue and PR comments for AI-assisted development via the opencode agent.
 
-1. Generare una volta un keystore release e conservarlo in modo sicuro.
-2. Creare `keystore.properties` nella root del progetto partendo da `keystore.properties.example`.
-3. Inserire valori reali (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`).
-4. Build release: `./gradlew.bat :app:assembleRelease`
+## Installation
 
-Nota: se `keystore.properties` non esiste, la build release usa la firma debug solo per test locali e potrebbe non essere aggiornabile su installazioni precedenti firmate con un'altra chiave.
+### From GitHub Releases (recommended)
 
-## Deploy rapido emulatore (Windows)
+1. Download the latest APK from [Releases](https://github.com/andreaschiona/uscrooge-trading-app/releases/latest)
+2. On your Android device, enable **Settings > Security > Unknown Sources** (or per-app install permission)
+3. Open the downloaded APK and install
+4. Requires Android 8.0 (API 26) or higher
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\Deploy-AppToEmulator.ps1 -AvdName "Pixel_8_API_34"
+### Build from Source
+
+```bash
+# Clone
+git clone https://github.com/andreaschiona/uscrooge-trading-app.git
+cd uscrooge-trading-app
+
+# Create local.properties with your Android SDK path
+echo "sdk.dir=/path/to/Android/Sdk" > local.properties
+
+# Build debug APK
+./gradlew assembleDebug
+
+# APK will be at app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Alternative utili:
+Requirements: JDK 17, Android SDK with API 34.
 
-```powershell
-# Emulatore gia avviato
-powershell -ExecutionPolicy Bypass -File .\scripts\Deploy-AppToEmulator.ps1 -DeviceId emulator-5554
+## Configuration
 
-# Reinstall senza build
-powershell -ExecutionPolicy Bypass -File .\scripts\Deploy-AppToEmulator.ps1 -AvdName "Pixel_8_API_34" -SkipBuild
-```
+After installation, open the app and navigate to **Settings**:
 
-## Configurazione Kraken
+### API Keys (required for trading)
+1. Create API keys on [Kraken](https://www.kraken.com/u/security/api) with permissions: Query Funds, Create & Modify Orders, Cancel/Close Orders, Query Open Orders & Trades
+2. Enter your **API Key** and **API Secret** in the app settings
 
-1. Creare API key da Kraken (`Settings -> API`).
-2. Abilitare solo i permessi necessari:
-   - Query Funds
-   - Query Open Orders & Trades
-   - Query Closed Orders & Trades
-   - Create & Modify Orders
-   - Cancel/Close Orders
-3. Non abilitare `Withdraw Funds`.
-4. Inserire API key/secret in Settings dell'app.
+### Key Parameters
 
-## Configurazione trading (default applicativi)
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| Automatic Trading | OFF | Enable autonomous execution |
+| Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Assets to analyze |
+| Risk Per Trade | 25% | Max percentage of balance per trade |
+| Max Open Positions | 3 | Concurrent position limit |
+| Max Daily Trades | 5 | Daily trade cap |
+| Stop Loss | 2% | Loss threshold for exit |
+| Take Profit | 4% | Profit target |
+| Trailing Stop | 1.5% | Distance from peak price |
+| Min Signal Strength | 65% | Minimum confidence to generate signal |
+| Strong Signal Threshold | 80% | Minimum for auto-execution |
+| Use Limit Orders | ON | Use limit orders for moderate signals |
+| Circuit Breaker | ON | Auto-halt on excessive losses |
+| Max Daily Drawdown | 5% | Drawdown threshold for halt |
+| Check Interval | 300s | Analysis frequency |
 
-- Coppie: `BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR`
-- Min signal strength: `65%`
-- Strong signal threshold: `80%`
-- Stop loss: `2%`
-- Take profit: `4%`
-- Trailing stop: `1.5%`
-- Max slippage: `0.5%`
-- Intervallo analisi: `5 minuti`
+### Risk Warning
 
-## Note operative importanti
+This software is provided as-is for educational and personal use. Cryptocurrency trading carries significant risk of capital loss. Past performance does not guarantee future results. Always start with small amounts and monitor the system closely.
 
-- `UScroogeApplication` istanzia `KrakenApiClient`, `TradingStrategy` e `OrderExecutor` con config di default/empty e non li ricostruisce automaticamente ai cambi Settings.
-- `OrderExecutor.updatePositionPrices()` legge da Flow; chiamate improprie da worker possono allungare l'esecuzione del job.
-- Room usa `fallbackToDestructiveMigration()`: cambi schema senza migration possono cancellare i dati locali.
-- Il reschedule del worker usa `ExistingPeriodicWorkPolicy.REPLACE`.
+## License
 
-## Risoluzione problemi (build)
-
-- `resource ... ic_launcher_foreground not found`: verificare riferimenti `@drawable/ic_launcher_foreground` nelle adaptive icon.
-- `file name must end with .xml or .png`: rimuovere file non supportati da `app/src/main/res/**`.
-- `duplicate resources`: eliminare definizioni duplicate in `values/*`.
-- Errore Kotlin/KSP: controllare output completo (`--stacktrace`) e verificare import mancanti o annotazioni Room incoerenti.
-
-## Struttura progetto
-
-```text
-app/
-  src/main/java/com/uscrooge/app/
-    analysis/
-    data/
-      api/
-      local/
-      model/
-      repository/
-    executor/
-    notification/
-    strategy/
-    ui/
-      screen/
-      theme/
-      viewmodel/
-    worker/
-    MainActivity.kt
-    UScroogeApplication.kt
-  build.gradle.kts
-build.gradle.kts
-settings.gradle.kts
-scripts/
-```
-
-## Sicurezza e disclaimer
-
-- Non committare mai API key o segreti.
-- Usare 2FA su Kraken e permessi API minimi.
-- Il trading crypto comporta rischi elevati: usare budget ridotti in fase iniziale.
-- Questo software e fornito "as is" senza garanzie.
+Private repository. All rights reserved.

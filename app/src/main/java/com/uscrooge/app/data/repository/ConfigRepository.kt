@@ -56,6 +56,10 @@ class ConfigRepository(private val context: Context) {
         private val NOTIFY_ON_SIGNALS = booleanPreferencesKey("notify_on_signals")
         private val NOTIFY_ON_EXECUTION = booleanPreferencesKey("notify_on_execution")
         private val NOTIFY_ON_ERRORS = booleanPreferencesKey("notify_on_errors")
+        private val CIRCUIT_BREAKER_ENABLED = booleanPreferencesKey("circuit_breaker_enabled")
+        private val MAX_DAILY_DRAWDOWN_PERCENT = doublePreferencesKey("max_daily_drawdown_percent")
+        private val MAX_CONSECUTIVE_FAILURES = intPreferencesKey("max_consecutive_failures")
+        private val CIRCUIT_BREAKER_COOLDOWN_MINUTES = intPreferencesKey("circuit_breaker_cooldown_minutes")
     }
 
     val configFlow: Flow<TradingConfig> = context.dataStore.data
@@ -99,7 +103,11 @@ class ConfigRepository(private val context: Context) {
                 minVolumeRatio = preferences[MIN_VOLUME_RATIO] ?: 0.8,
                 notifyOnSignals = preferences[NOTIFY_ON_SIGNALS] ?: true,
                 notifyOnExecution = preferences[NOTIFY_ON_EXECUTION] ?: true,
-                notifyOnErrors = preferences[NOTIFY_ON_ERRORS] ?: true
+                notifyOnErrors = preferences[NOTIFY_ON_ERRORS] ?: true,
+                circuitBreakerEnabled = preferences[CIRCUIT_BREAKER_ENABLED] ?: true,
+                maxDailyDrawdownPercent = preferences[MAX_DAILY_DRAWDOWN_PERCENT] ?: 5.0,
+                maxConsecutiveFailures = preferences[MAX_CONSECUTIVE_FAILURES] ?: 3,
+                circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60
             )
         }
 
@@ -137,6 +145,10 @@ class ConfigRepository(private val context: Context) {
             preferences[NOTIFY_ON_SIGNALS] = config.notifyOnSignals
             preferences[NOTIFY_ON_EXECUTION] = config.notifyOnExecution
             preferences[NOTIFY_ON_ERRORS] = config.notifyOnErrors
+            preferences[CIRCUIT_BREAKER_ENABLED] = config.circuitBreakerEnabled
+            preferences[MAX_DAILY_DRAWDOWN_PERCENT] = config.maxDailyDrawdownPercent
+            preferences[MAX_CONSECUTIVE_FAILURES] = config.maxConsecutiveFailures
+            preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] = config.circuitBreakerCooldownMinutes
         }
     }
 

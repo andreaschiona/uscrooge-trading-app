@@ -11,6 +11,7 @@ data class Position(
     val amount: Double,                  // Amount of base currency
     val averageEntryPrice: Double,
     val currentPrice: Double,
+    val peakPrice: Double = 0.0,         // Highest price since entry (for trailing stop)
     val totalInvested: Double,           // In quote currency (EUR)
     val currentValue: Double,            // Current value in quote currency
     val unrealizedPnL: Double,           // Profit/Loss
@@ -19,15 +20,19 @@ data class Position(
     val updatedAt: Long,
     val isOpen: Boolean = true,
     val closedAt: Long? = null,
-    val realizedPnL: Double? = null
+    val realizedPnL: Double? = null,
+    val exchangeStopOrderId: String? = null,    // Stop-loss order ID on exchange
+    val exchangeTakeProfitOrderId: String? = null // Take-profit order ID on exchange
 ) {
     fun calculateCurrentValue(currentPrice: Double): Position {
         val newCurrentValue = amount * currentPrice
         val newUnrealizedPnL = newCurrentValue - totalInvested
         val newUnrealizedPnLPercent = (newUnrealizedPnL / totalInvested) * 100
+        val newPeakPrice = maxOf(peakPrice, currentPrice)
 
         return copy(
             currentPrice = currentPrice,
+            peakPrice = newPeakPrice,
             currentValue = newCurrentValue,
             unrealizedPnL = newUnrealizedPnL,
             unrealizedPnLPercent = newUnrealizedPnLPercent,

@@ -360,7 +360,7 @@ class KrakenApiClient(
 
             val response = getApiService().addOrder(
                 nonce = nonce,
-                ordertype = orderType.name.lowercase(),
+                ordertype = orderType.toKrakenString(),
                 type = type.name.lowercase(),
                 volume = volume.toString(),
                 pair = krakenPair,

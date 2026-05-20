@@ -53,6 +53,12 @@ data class TradingConfig(
     val notifyOnExecution: Boolean = true,
     val notifyOnErrors: Boolean = true,
 
+    // Circuit breaker
+    val circuitBreakerEnabled: Boolean = true,
+    val maxDailyDrawdownPercent: Double = 5.0,    // Halt trading if daily loss > 5%
+    val maxConsecutiveFailures: Int = 3,           // Halt after 3 consecutive failures
+    val circuitBreakerCooldownMinutes: Int = 60,   // Wait 60 min before resuming
+
     // Update timestamp
     val lastUpdated: Long = System.currentTimeMillis()
 ) {

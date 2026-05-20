@@ -24,7 +24,15 @@ enum class OrderType {
     MARKET,
     LIMIT,
     STOP_LOSS,
-    TAKE_PROFIT
+    TAKE_PROFIT;
+
+    /** Returns the Kraken API string for this order type (e.g. "stop-loss"). */
+    fun toKrakenString(): String = when (this) {
+        MARKET -> "market"
+        LIMIT -> "limit"
+        STOP_LOSS -> "stop-loss"
+        TAKE_PROFIT -> "take-profit"
+    }
 }
 
 enum class OrderSide {

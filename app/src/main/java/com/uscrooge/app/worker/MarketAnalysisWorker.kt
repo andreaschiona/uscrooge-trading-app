@@ -13,8 +13,10 @@ import androidx.work.WorkerParameters
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.di.BrokerRegistry
+import com.uscrooge.app.executor.CircuitBreaker
 import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.notification.NotificationHelper
+import com.uscrooge.app.strategy.TradingStrategy
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -29,7 +31,9 @@ class MarketAnalysisWorker @AssistedInject constructor(
     private val configRepository: ConfigRepository,
     private val brokerRegistry: BrokerRegistry,
     private val orderExecutor: OrderExecutor,
-    private val notificationHelper: NotificationHelper
+    private val notificationHelper: NotificationHelper,
+    private val tradingStrategy: TradingStrategy,
+    private val circuitBreaker: CircuitBreaker
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -42,7 +46,39 @@ class MarketAnalysisWorker @AssistedInject constructor(
             // singleton client could otherwise be holding empty credentials.
             brokerRegistry.applyConfig(config)
 
-            // Analyze all trading pairs
+            // --- STEP 1: Monitor exit conditions on open positions ---
+            // This runs FIRST regardless of circuit breaker state, because
+            // protecting capital takes priority over opening new positions.
+            try {
+                val closedPositions = orderExecutor.monitorExitConditions(tradingStrategy)
+                if (closedPositions.isNotEmpty() && config.notifyOnExecution) {
+                    closedPositions.forEach { pos ->
+                        notificationHelper.sendErrorNotification(
+                            "Position closed: ${pos.pair}",
+                            "P/L: ${String.format("%.2f", pos.realizedPnL ?: pos.unrealizedPnL)} EUR"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MarketAnalysisWorker", "Exit monitoring failed: ${e.message}", e)
+            }
+
+            // --- STEP 2: Check circuit breaker before new analysis/trading ---
+            val blocked = circuitBreaker.checkTradingAllowed(config)
+            if (blocked != null) {
+                Log.w("MarketAnalysisWorker", "Trading blocked: $blocked")
+                if (config.notifyOnErrors) {
+                    notificationHelper.sendErrorNotification(
+                        "Trading halted",
+                        blocked
+                    )
+                }
+                // Still update prices even if trading is halted
+                orderExecutor.updatePositionPrices()
+                return Result.success()
+            }
+
+            // --- STEP 3: Analyze all trading pairs ---
             val signals = repository.analyzeAllPairs(config)
 
             // Notify analysis errors
@@ -64,9 +100,16 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 }
             }
 
-            // If automatic trading is enabled, execute signals
+            // --- STEP 4: Execute signals if automatic trading is enabled ---
             if (config.automaticTrading) {
                 for (signal in signals) {
+                    // Re-check circuit breaker before each trade
+                    val tradeBlocked = circuitBreaker.checkTradingAllowed(config)
+                    if (tradeBlocked != null) {
+                        Log.w("MarketAnalysisWorker", "Stopping execution: $tradeBlocked")
+                        break
+                    }
+
                     if (signal.strength >= config.strongSignalThreshold) {
                         try {
                             val result = orderExecutor.executeSignal(signal)

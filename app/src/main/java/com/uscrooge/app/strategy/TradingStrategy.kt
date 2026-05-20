@@ -368,9 +368,9 @@ class TradingStrategy @Inject constructor(
         }
 
         // Check trailing stop
-        val peakPrice = position.currentPrice
+        val peakPrice = maxOf(position.peakPrice, position.currentPrice)
         val trailingStopPrice = peakPrice * (1 - config.trailingStopPercent / 100)
-        if (currentPrice < trailingStopPrice) {
+        if (currentPrice < trailingStopPrice && currentPnLPercent > 0) {
             return ExitSignal(
                 reason = "Trailing stop triggered",
                 urgency = ExitUrgency.IMMEDIATE,

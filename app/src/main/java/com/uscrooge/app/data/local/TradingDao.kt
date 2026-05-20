@@ -50,6 +50,9 @@ interface OrderDao {
 
     @Query("SELECT * FROM orders WHERE pair = :pair ORDER BY createdAt DESC LIMIT 10")
     fun getOrdersByPair(pair: String): Flow<List<Order>>
+
+    @Query("SELECT COUNT(*) FROM orders WHERE createdAt >= :sinceTimestamp AND status IN ('OPEN', 'CLOSED')")
+    suspend fun getTradeCountSince(sinceTimestamp: Long): Int
 }
 
 @Dao

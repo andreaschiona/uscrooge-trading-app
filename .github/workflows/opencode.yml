@@ -8,43 +8,26 @@ on:
 
 jobs:
   opencode:
-    if: github.event.comment.user.login == 'andreaschiona'
+    if: |
+      contains(github.event.comment.body, ' /oc') ||
+      startsWith(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, ' /opencode') ||
+      startsWith(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      discussions: write
       id-token: write
-      actions: write
+      contents: read
+      pull-requests: read
+      issues: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # Corretto da v6 a v4
+        uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Git
-        run: |
-          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
-          git config --global user.name "opencode-agent[bot]"
+          persist-credentials: false
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
           model: opencode/big-pickle
-          use_github_token: true
-
-      # Questo step garantisce che i file creati da Docker 
-      # siano accessibili a Git per il commit/push
-      - name: Fix permissions for Git
-        if: failure() || success()
-        run: sudo chown -R $USER:$USER ${{ github.workspace }}
-
-      - name: Upload Opencode Logs on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: opencode-debug-logs
-          path: /home/runner/.local/share/opencode/log/

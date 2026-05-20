@@ -2,6 +2,7 @@ package com.uscrooge.app.executor
 
 import android.util.Log
 import com.uscrooge.app.data.api.KrakenApiClient
+import com.uscrooge.app.data.api.retryWithBackoff
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
@@ -14,6 +15,13 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
+
+data class Quadruple<A, B, C, D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
 
 @Singleton
 class OrderExecutor @Inject constructor(
@@ -29,6 +37,9 @@ class OrderExecutor @Inject constructor(
 
     companion object {
         private const val TAG = "OrderExecutor"
+        private const val ORDER_POLL_INTERVAL_MS = 2000L
+        private const val ORDER_POLL_TIMEOUT_MS = 30000L
+        private const val MAX_FILL_RETRIES = 5
     }
 
     /**
@@ -138,10 +149,19 @@ class OrderExecutor @Inject constructor(
 
         val orderId = orderResult.getOrNull()!!
 
-        // Wait a bit for order to be processed
-        delay(2000)
+        val fillResult = waitForOrderFill(orderId, pair)
 
-        val executionPrice = limitPrice ?: currentPrice
+        val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
+            val fillInfo = fillResult.getOrNull()!!
+            if (fillInfo.status == OrderStatus.CLOSED) {
+                Quadruple(fillInfo.executedPrice, fillInfo.executedVolume, fillInfo.fee, fillInfo.status)
+            } else {
+                Quadruple(limitPrice ?: currentPrice, volume, signal.suggestedAmount * 0.0026, OrderStatus.OPEN)
+            }
+        } else {
+            Log.w(TAG, "Using fallback price for order $orderId: ${fillResult.exceptionOrNull()?.message}")
+            Quadruple(limitPrice ?: currentPrice, volume, signal.suggestedAmount * 0.0026, OrderStatus.OPEN)
+        }
 
         // Create order record
         val order = Order(
@@ -150,12 +170,12 @@ class OrderExecutor @Inject constructor(
             type = orderType,
             side = OrderSide.BUY,
             price = executionPrice,
-            amount = volume,
-            cost = signal.suggestedAmount,
-            fee = signal.suggestedAmount * 0.0026,  // Kraken's typical fee
-            status = if (useLimit) OrderStatus.OPEN else OrderStatus.OPEN,
+            amount = actualVolume,
+            cost = actualVolume * executionPrice,
+            fee = actualFee,
+            status = finalStatus,
             createdAt = System.currentTimeMillis(),
-            executedAt = System.currentTimeMillis(),
+            executedAt = if (finalStatus == OrderStatus.CLOSED) System.currentTimeMillis() else null,
             signalId = signal.id
         )
 
@@ -344,11 +364,22 @@ class OrderExecutor @Inject constructor(
             try { apiClient.cancelOrder(id) } catch (_: Exception) {}
         }
 
-        // Wait for order processing
-        delay(2000)
+        val fillResult = waitForOrderFill(orderId, pair)
 
-        val totalValue = volume * currentPrice
-        val fee = totalValue * 0.0026
+        val fallbackFee = (volume * currentPrice) * 0.0026
+        val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
+            val fillInfo = fillResult.getOrNull()!!
+            if (fillInfo.status == OrderStatus.CLOSED) {
+                Quadruple(fillInfo.executedPrice, fillInfo.executedVolume, fillInfo.fee, fillInfo.status)
+            } else {
+                Quadruple(currentPrice, volume, fallbackFee, OrderStatus.OPEN)
+            }
+        } else {
+            Log.w(TAG, "Using fallback price for sell order $orderId: ${fillResult.exceptionOrNull()?.message}")
+            Quadruple(currentPrice, volume, fallbackFee, OrderStatus.OPEN)
+        }
+
+        val totalValue = actualVolume * executionPrice
 
         // Create order record
         val order = Order(
@@ -356,22 +387,22 @@ class OrderExecutor @Inject constructor(
             pair = signal.pair,
             type = OrderType.MARKET,
             side = OrderSide.SELL,
-            price = currentPrice,
-            amount = volume,
+            price = executionPrice,
+            amount = actualVolume,
             cost = totalValue,
-            fee = fee,
-            status = OrderStatus.CLOSED,
+            fee = actualFee,
+            status = finalStatus,
             createdAt = System.currentTimeMillis(),
-            executedAt = System.currentTimeMillis(),
+            executedAt = if (finalStatus == OrderStatus.CLOSED) System.currentTimeMillis() else null,
             signalId = signal.id
         )
 
         orderDao.insertOrder(order)
 
         // Close position
-        val realizedPnL = totalValue - position.totalInvested - fee
+        val realizedPnL = totalValue - position.totalInvested - actualFee
         val closedPosition = position.copy(
-            currentPrice = currentPrice,
+            currentPrice = executionPrice,
             currentValue = totalValue,
             unrealizedPnL = realizedPnL,
             realizedPnL = realizedPnL,
@@ -471,32 +502,43 @@ class OrderExecutor @Inject constructor(
             try { apiClient.cancelOrder(id) } catch (_: Exception) {}
         }
 
-        delay(2000)
+        val fillResult = waitForOrderFill(orderId, pair)
 
-        val currentPrice = exitSignal.suggestedPrice
-        val totalValue = volume * currentPrice
-        val fee = totalValue * 0.0026
+        val fallbackFee = (volume * exitSignal.suggestedPrice) * 0.0026
+        val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
+            val fillInfo = fillResult.getOrNull()!!
+            if (fillInfo.status == OrderStatus.CLOSED) {
+                Quadruple(fillInfo.executedPrice, fillInfo.executedVolume, fillInfo.fee, fillInfo.status)
+            } else {
+                Quadruple(exitSignal.suggestedPrice, volume, fallbackFee, OrderStatus.OPEN)
+            }
+        } else {
+            Log.w(TAG, "Using fallback price for exit order $orderId: ${fillResult.exceptionOrNull()?.message}")
+            Quadruple(exitSignal.suggestedPrice, volume, fallbackFee, OrderStatus.OPEN)
+        }
+
+        val totalValue = actualVolume * executionPrice
 
         val order = Order(
             orderId = orderId,
             pair = position.pair,
             type = OrderType.MARKET,
             side = OrderSide.SELL,
-            price = currentPrice,
-            amount = volume,
+            price = executionPrice,
+            amount = actualVolume,
             cost = totalValue,
-            fee = fee,
-            status = OrderStatus.CLOSED,
+            fee = actualFee,
+            status = finalStatus,
             createdAt = System.currentTimeMillis(),
-            executedAt = System.currentTimeMillis(),
+            executedAt = if (finalStatus == OrderStatus.CLOSED) System.currentTimeMillis() else null,
             signalId = null
         )
 
         orderDao.insertOrder(order)
 
-        val realizedPnL = totalValue - position.totalInvested - fee
+        val realizedPnL = totalValue - position.totalInvested - actualFee
         val closedPosition = position.copy(
-            currentPrice = currentPrice,
+            currentPrice = executionPrice,
             currentValue = totalValue,
             unrealizedPnL = realizedPnL,
             realizedPnL = realizedPnL,
@@ -508,7 +550,6 @@ class OrderExecutor @Inject constructor(
         )
 
         positionDao.updatePosition(closedPosition)
-        circuitBreaker.recordSuccess()
 
         Log.i(TAG, "Exit order executed for ${position.pair}: ${exitSignal.reason}, PnL: $realizedPnL")
 
@@ -523,7 +564,6 @@ class OrderExecutor @Inject constructor(
         return try {
             val result = apiClient.cancelOrder(orderId)
             if (result.isSuccess) {
-                // Update order status
                 val order = orderDao.getOrderById(orderId)
                 order?.let {
                     orderDao.updateOrder(it.copy(status = OrderStatus.CANCELED))
@@ -534,6 +574,99 @@ class OrderExecutor @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun waitForOrderFill(
+        orderId: String,
+        pair: TradingPair,
+        timeoutMs: Long = ORDER_POLL_TIMEOUT_MS,
+        pollIntervalMs: Long = ORDER_POLL_INTERVAL_MS
+    ): Result<OrderFillInfo> {
+        val startTime = System.currentTimeMillis()
+        var lastStatus: String? = null
+
+        repeat(MAX_FILL_RETRIES) { attempt ->
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed > timeoutMs) {
+                Log.w(TAG, "Order $orderId fill timeout after ${elapsed}ms")
+                return Result.failure(Exception("Order fill timeout after ${elapsed}ms"))
+            }
+
+            val orderInfoResult = retryWithBackoff(
+                maxRetries = 2,
+                initialDelayMs = 1000
+            ) {
+                apiClient.queryOrder(orderId)
+            }
+
+            if (orderInfoResult.isFailure) {
+                Log.w(TAG, "Failed to query order $orderId: ${orderInfoResult.exceptionOrNull()?.message}")
+                delay(pollIntervalMs)
+                return@repeat
+            }
+
+            val orderInfo = orderInfoResult.getOrNull()
+            if (orderInfo == null) {
+                Log.w(TAG, "Order $orderId not found on exchange")
+                delay(pollIntervalMs)
+                return@repeat
+            }
+
+            lastStatus = orderInfo.status
+
+            when (orderInfo.status.lowercase()) {
+                "closed" -> {
+                    val executedPrice = orderInfo.price.toDoubleOrNull() ?: 0.0
+                    val executedVolume = orderInfo.vol_exec.toDoubleOrNull() ?: 0.0
+                    val fee = orderInfo.fee.toDoubleOrNull() ?: 0.0
+
+                    Log.i(TAG, "Order $orderId filled: price=$executedPrice, volume=$executedVolume, fee=$fee")
+                    return Result.success(
+                        OrderFillInfo(
+                            orderId = orderId,
+                            status = OrderStatus.CLOSED,
+                            executedPrice = executedPrice,
+                            executedVolume = executedVolume,
+                            fee = fee,
+                            fillTime = System.currentTimeMillis()
+                        )
+                    )
+                }
+                "open", "pending" -> {
+                    Log.d(TAG, "Order $orderId still ${orderInfo.status} (attempt ${attempt + 1}/$MAX_FILL_RETRIES)")
+                    delay(pollIntervalMs)
+                }
+                "canceled", "expired" -> {
+                    Log.w(TAG, "Order $orderId was ${orderInfo.status}")
+                    return Result.success(
+                        OrderFillInfo(
+                            orderId = orderId,
+                            status = if (orderInfo.status.lowercase() == "canceled") OrderStatus.CANCELED else OrderStatus.EXPIRED,
+                            executedPrice = 0.0,
+                            executedVolume = 0.0,
+                            fee = 0.0,
+                            fillTime = System.currentTimeMillis()
+                        )
+                    )
+                }
+                else -> {
+                    Log.w(TAG, "Unknown order status: ${orderInfo.status}")
+                    delay(pollIntervalMs)
+                }
+            }
+        }
+
+        Log.w(TAG, "Order $orderId did not fill after $MAX_FILL_RETRIES attempts, last status: $lastStatus")
+        return Result.failure(Exception("Order did not fill after $MAX_FILL_RETRIES attempts, last status: $lastStatus"))
+    }
+
+    data class OrderFillInfo(
+        val orderId: String,
+        val status: OrderStatus,
+        val executedPrice: Double,
+        val executedVolume: Double,
+        val fee: Double,
+        val fillTime: Long
+    )
 
     suspend fun updatePositionPrices() {
         val positions = positionDao.getOpenPositions().first()

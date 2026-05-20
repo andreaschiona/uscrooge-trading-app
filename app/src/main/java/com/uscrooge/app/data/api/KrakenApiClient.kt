@@ -11,7 +11,8 @@ import java.util.concurrent.atomic.AtomicLong
 class KrakenApiClient(
     apiKey: String = "",
     apiSecret: String = "",
-    timeout: Long = 30000
+    timeout: Long = 30000,
+    private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 2.0, maxBurstSize = 5)
 ) {
     private val baseUrl = "https://api.kraken.com/"
 
@@ -28,7 +29,7 @@ class KrakenApiClient(
     private var apiServiceCache: KrakenApiService? = null
 
     @Volatile
-    private var apiServiceCacheKey: String = ""
+    private var apiServiceCacheKey = ""
 
     @Volatile
     private var okHttpClientCache: OkHttpClient? = null
@@ -79,6 +80,10 @@ class KrakenApiClient(
         }
     }
 
+    suspend fun getRateLimiterStatus(): RateLimiterStatus {
+        return rateLimiter.getStatus()
+    }
+
     /**
      * Releases the cached OkHttp dispatcher executor and connection pool.
      * Safe to call from short-lived [KrakenApiClient] instances (e.g. one-off
@@ -123,6 +128,7 @@ class KrakenApiClient(
                 .connectTimeout(timeout, TimeUnit.MILLISECONDS)
                 .readTimeout(timeout, TimeUnit.MILLISECONDS)
                 .writeTimeout(timeout, TimeUnit.MILLISECONDS)
+                .addInterceptor(RateLimitInterceptor(rateLimiter))
                 .addInterceptor(HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor.Level.BODY
                 })
@@ -462,6 +468,46 @@ class KrakenApiClient(
                 }
 
                 Result.success(body.result?.open ?: emptyMap())
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun queryOrders(txids: List<String>): Result<Map<String, OrderInfo>> {
+        return try {
+            val nonce = nextNonce()
+            val response = getApiService().queryOrders(nonce, txids.joinToString(","))
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return Result.failure(Exception(body.error.joinToString()))
+                }
+
+                Result.success(body.result ?: emptyMap())
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun queryOrder(txid: String): Result<OrderInfo?> {
+        return try {
+            val nonce = nextNonce()
+            val response = getApiService().queryOrders(nonce, txid)
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return Result.failure(Exception(body.error.joinToString()))
+                }
+
+                Result.success(body.result?.values?.firstOrNull())
             } else {
                 Result.failure(Exception("API error: ${response.code()}"))
             }

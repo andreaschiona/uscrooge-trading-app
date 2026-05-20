@@ -4,6 +4,7 @@ import android.content.Context
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.local.TradingDatabase
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.repository.ConfigRepository
@@ -65,4 +66,7 @@ object DatabaseModule {
 
     @Provides
     fun providePositionDao(db: TradingDatabase): PositionDao = db.positionDao()
+
+    @Provides
+    fun provideTradeJournalDao(db: TradingDatabase): TradeJournalDao = db.tradeJournalDao()
 }

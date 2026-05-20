@@ -81,3 +81,48 @@ interface PositionDao {
     @Query("SELECT COUNT(*) FROM positions WHERE isOpen = 1")
     suspend fun getOpenPositionsCount(): Int
 }
+
+@Dao
+interface TradeJournalDao {
+    @Query("SELECT * FROM trade_journal ORDER BY exitTime DESC")
+    fun getAllEntries(): Flow<List<TradeJournalEntry>>
+
+    @Query("SELECT * FROM trade_journal WHERE pair = :pair ORDER BY exitTime DESC")
+    fun getEntriesByPair(pair: String): Flow<List<TradeJournalEntry>>
+
+    @Query("SELECT * FROM trade_journal WHERE side = :side ORDER BY exitTime DESC")
+    fun getEntriesBySide(side: OrderSide): Flow<List<TradeJournalEntry>>
+
+    @Query("SELECT * FROM trade_journal WHERE id = :id")
+    suspend fun getEntryById(id: Long): TradeJournalEntry?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEntry(entry: TradeJournalEntry): Long
+
+    @Update
+    suspend fun updateEntry(entry: TradeJournalEntry)
+
+    @Delete
+    suspend fun deleteEntry(entry: TradeJournalEntry)
+
+    @Query("SELECT COUNT(*) FROM trade_journal WHERE exitTime >= :sinceTimestamp")
+    suspend fun getEntryCountSince(sinceTimestamp: Long): Int
+
+    @Query("SELECT SUM(profitLoss) FROM trade_journal WHERE exitTime >= :sinceTimestamp")
+    suspend fun getTotalPnLSince(sinceTimestamp: Long): Double?
+
+    @Query("SELECT * FROM trade_journal ORDER BY profitLoss DESC LIMIT 10")
+    fun getTopWinners(): Flow<List<TradeJournalEntry>>
+
+    @Query("SELECT * FROM trade_journal ORDER BY profitLoss ASC LIMIT 10")
+    fun getTopLosers(): Flow<List<TradeJournalEntry>>
+
+    @Query("SELECT pair, COUNT(*) as tradeCount, AVG(profitLossPercent) as avgPnLPercent FROM trade_journal GROUP BY pair ORDER BY avgPnLPercent DESC")
+    fun getPairStatistics(): Flow<List<PairTradeStats>>
+}
+
+data class PairTradeStats(
+    val pair: String,
+    val tradeCount: Int,
+    val avgPnLPercent: Double
+)

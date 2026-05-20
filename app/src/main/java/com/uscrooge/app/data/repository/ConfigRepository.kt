@@ -1,12 +1,14 @@
 package com.uscrooge.app.data.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.uscrooge.app.data.model.TradingConfig
+import com.uscrooge.app.security.ApiSecurityManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -22,8 +24,10 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
 class ConfigRepository(private val context: Context) {
 
     private val gson = Gson()
+    private val securityManager = ApiSecurityManager()
 
     companion object {
+        private const val TAG = "ConfigRepository"
         private val TRADING_PAIRS = stringPreferencesKey("trading_pairs")
         private val RISK_PER_TRADE = doublePreferencesKey("risk_per_trade")
         private val MAX_OPEN_POSITIONS = intPreferencesKey("max_open_positions")
@@ -92,8 +96,8 @@ class ConfigRepository(private val context: Context) {
                 checkIntervalSeconds = preferences[CHECK_INTERVAL_SECONDS] ?: 300,
                 maxSlippagePercent = preferences[MAX_SLIPPAGE_PERCENT] ?: 0.5,
                 useLimitOrders = preferences[USE_LIMIT_ORDERS] ?: true,
-                krakenApiKey = preferences[KRAKEN_API_KEY] ?: "",
-                krakenApiSecret = preferences[KRAKEN_API_SECRET] ?: "",
+                krakenApiKey = decryptApiKey(preferences[KRAKEN_API_KEY] ?: ""),
+                krakenApiSecret = decryptApiSecret(preferences[KRAKEN_API_SECRET] ?: ""),
                 apiTimeout = preferences[API_TIMEOUT] ?: 30000,
                 useMultiTimeframe = preferences[USE_MULTI_TIMEFRAME] ?: true,
                 primaryTimeframe = preferences[PRIMARY_TIMEFRAME] ?: 60,
@@ -134,8 +138,8 @@ class ConfigRepository(private val context: Context) {
             preferences[CHECK_INTERVAL_SECONDS] = config.checkIntervalSeconds
             preferences[MAX_SLIPPAGE_PERCENT] = config.maxSlippagePercent
             preferences[USE_LIMIT_ORDERS] = config.useLimitOrders
-            preferences[KRAKEN_API_KEY] = config.krakenApiKey
-            preferences[KRAKEN_API_SECRET] = config.krakenApiSecret
+            preferences[KRAKEN_API_KEY] = encryptApiKey(config.krakenApiKey)
+            preferences[KRAKEN_API_SECRET] = encryptApiSecret(config.krakenApiSecret)
             preferences[API_TIMEOUT] = config.apiTimeout
             preferences[USE_MULTI_TIMEFRAME] = config.useMultiTimeframe
             preferences[PRIMARY_TIMEFRAME] = config.primaryTimeframe
@@ -157,5 +161,49 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun resetToDefaults() {
         updateConfig(TradingConfig())
+    }
+
+    private fun encryptApiKey(plainText: String): String {
+        return if (plainText.isEmpty()) "" else {
+            try {
+                securityManager.encrypt(plainText)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to encrypt API key", e)
+                plainText
+            }
+        }
+    }
+
+    private fun encryptApiSecret(plainText: String): String {
+        return if (plainText.isEmpty()) "" else {
+            try {
+                securityManager.encrypt(plainText)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to encrypt API secret", e)
+                plainText
+            }
+        }
+    }
+
+    private fun decryptApiKey(encrypted: String): String {
+        return if (encrypted.isEmpty()) "" else {
+            try {
+                securityManager.decrypt(encrypted)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to decrypt API key, returning as-is", e)
+                encrypted
+            }
+        }
+    }
+
+    private fun decryptApiSecret(encrypted: String): String {
+        return if (encrypted.isEmpty()) "" else {
+            try {
+                securityManager.decrypt(encrypted)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to decrypt API secret, returning as-is", e)
+                encrypted
+            }
+        }
     }
 }

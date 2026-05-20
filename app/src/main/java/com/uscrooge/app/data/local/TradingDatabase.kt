@@ -12,7 +12,7 @@ import com.uscrooge.app.data.model.*
         Order::class,
         Position::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {

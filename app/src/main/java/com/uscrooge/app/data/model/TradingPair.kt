@@ -18,14 +18,22 @@ data class TradingPair(
     }
 
     fun toKrakenSymbol(): String {
-        // Kraken uses format like XXBTZEUR
+        // Kraken uses format like XXBTZEUR for legacy pairs,
+        // but newer assets like SOL use simple format (SOLEUR)
         val baseMap = mapOf(
             "BTC" to "XXBT",
             "ETH" to "XETH",
-            "SOL" to "SOL",
             "XRP" to "XXRP"
         )
         val quoteMap = mapOf("EUR" to "ZEUR", "USD" to "ZUSD")
-        return (baseMap[base] ?: base) + (quoteMap[quote] ?: quote)
+
+        val mappedBase = baseMap[base]
+        return if (mappedBase != null) {
+            // Legacy X-prefixed asset: use Z-prefixed quote
+            mappedBase + (quoteMap[quote] ?: quote)
+        } else {
+            // Newer asset (SOL, DOT, etc.): use simple format
+            base + quote
+        }
     }
 }

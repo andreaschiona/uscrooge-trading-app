@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.uscrooge.app.data.model.AnalysisLog
+import com.uscrooge.app.data.model.AnalysisLogEntry
 import com.uscrooge.app.data.model.SignalStatus
 import com.uscrooge.app.data.model.SignalType
 import com.uscrooge.app.data.model.TradingSignal
@@ -28,6 +30,7 @@ fun SignalsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val executionState by viewModel.executionState.collectAsState()
+    val analysisLog by viewModel.lastAnalysisLog.collectAsState()
 
     Column(
         modifier = modifier
@@ -53,6 +56,12 @@ fun SignalsScreen(
                 }
             }
             else -> {}
+        }
+
+        // Last analysis log
+        analysisLog?.let { log ->
+            AnalysisLogCard(log)
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         when (val state = uiState) {
@@ -410,4 +419,145 @@ fun StatusBadge(status: SignalStatus) {
 fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+@Composable
+fun AnalysisLogCard(log: AnalysisLog) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (log.errorCount > 0)
+                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+            else
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Last Analysis",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = formatTimestamp(log.timestamp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (log.errorCount > 0) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = Color(0xFFE57373).copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "${log.errorCount} errors",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE57373)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = "${log.successCount}/${log.totalCount} OK",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(8.dp))
+
+                log.entries.forEach { entry ->
+                    AnalysisLogEntryRow(entry)
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AnalysisLogEntryRow(entry: AnalysisLogEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = if (entry.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                contentDescription = null,
+                tint = if (entry.isSuccess) Color(0xFF4CAF50) else Color(0xFFE57373),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = entry.pair,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        if (entry.isSuccess) {
+            val info = when (entry.signalType) {
+                SignalType.BUY -> "BUY ${((entry.strength ?: 0.0) * 100).toInt()}%"
+                SignalType.SELL -> "SELL ${((entry.strength ?: 0.0) * 100).toInt()}%"
+                SignalType.HOLD -> "HOLD"
+                null -> "No signal"
+            }
+            Text(
+                text = info,
+                style = MaterialTheme.typography.bodySmall,
+                color = when (entry.signalType) {
+                    SignalType.BUY -> Color(0xFF4CAF50)
+                    SignalType.SELL -> Color(0xFFE57373)
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        } else {
+            Text(
+                text = entry.errorMessage ?: "Error",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFE57373),
+                maxLines = 1
+            )
+        }
+    }
 }

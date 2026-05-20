@@ -48,6 +48,17 @@ Output APK:
 - Debug: `app/build/outputs/apk/debug/app-debug.apk`
 - Release: `app/build/outputs/apk/release/app-release.apk`
 
+## Firma release e aggiornamenti senza perdita dati
+
+Per installare gli aggiornamenti sopra una versione gia presente (senza disinstallare) e mantenere configurazioni/DataStore/DB, l'APK deve essere firmato con la stessa chiave ad ogni release.
+
+1. Generare una volta un keystore release e conservarlo in modo sicuro.
+2. Creare `keystore.properties` nella root del progetto partendo da `keystore.properties.example`.
+3. Inserire valori reali (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`).
+4. Build release: `./gradlew.bat :app:assembleRelease`
+
+Nota: se `keystore.properties` non esiste, la build release usa la firma debug solo per test locali e potrebbe non essere aggiornabile su installazioni precedenti firmate con un'altra chiave.
+
 ## Deploy rapido emulatore (Windows)
 
 ```powershell

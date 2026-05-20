@@ -2,16 +2,25 @@ package com.uscrooge.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.uscrooge.app.data.model.AnalysisLog
 import com.uscrooge.app.data.model.TradingSignal
+import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.executor.OrderExecutor
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class SignalsViewModel(
+@HiltViewModel
+class SignalsViewModel @Inject constructor(
     private val repository: TradingRepository,
+    private val configRepository: ConfigRepository,
     private val orderExecutor: OrderExecutor
 ) : ViewModel() {
 
@@ -20,6 +29,9 @@ class SignalsViewModel(
 
     private val _executionState = MutableStateFlow<ExecutionState>(ExecutionState.Idle)
     val executionState: StateFlow<ExecutionState> = _executionState.asStateFlow()
+
+    val lastAnalysisLog: StateFlow<AnalysisLog?> = repository.lastAnalysisLog
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     init {
         loadSignals()
@@ -76,7 +88,18 @@ class SignalsViewModel(
     }
 
     fun refreshSignals() {
-        loadSignals()
+        viewModelScope.launch {
+            try {
+                val config = configRepository.configFlow.first()
+                repository.analyzeAllPairs(config)
+            } catch (e: Exception) {
+                _executionState.value = ExecutionState.Error(
+                    "Analysis failed: ${e.message ?: "Unknown error"}"
+                )
+                kotlinx.coroutines.delay(3000)
+                _executionState.value = ExecutionState.Idle
+            }
+        }
     }
 }
 

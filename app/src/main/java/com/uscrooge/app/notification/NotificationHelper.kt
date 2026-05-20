@@ -12,8 +12,14 @@ import com.uscrooge.app.MainActivity
 import com.uscrooge.app.R
 import com.uscrooge.app.data.model.Order
 import com.uscrooge.app.data.model.TradingSignal
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class NotificationHelper(private val context: Context) {
+@Singleton
+class NotificationHelper @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
 
     companion object {
         private const val CHANNEL_ID = "trading_signals"

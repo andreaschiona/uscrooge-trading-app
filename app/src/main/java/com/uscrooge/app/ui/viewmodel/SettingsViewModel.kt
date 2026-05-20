@@ -2,17 +2,36 @@ package com.uscrooge.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.worker.MarketAnalysisWorker
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.inject.Inject
+import javax.net.ssl.SSLException
 
-class SettingsViewModel(
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
     private val configRepository: ConfigRepository
 ) : ViewModel() {
+
+    private enum class CredentialsValidationStatus {
+        VALID,
+        INVALID,
+        UNVERIFIED
+    }
+
+    private data class CredentialsValidationResult(
+        val status: CredentialsValidationStatus,
+        val message: String? = null
+    )
 
     private val _config = MutableStateFlow<TradingConfig?>(null)
     val config: StateFlow<TradingConfig?> = _config.asStateFlow()
@@ -37,8 +56,10 @@ class SettingsViewModel(
             try {
                 _saveState.value = SaveState.Saving
 
+                val normalizedConfig = normalizeCredentials(newConfig)
+
                 // Validate config
-                val validation = newConfig.validate()
+                val validation = normalizedConfig.validate()
                 if (validation.isFailure) {
                     _saveState.value = SaveState.Error(
                         validation.exceptionOrNull()?.message ?: "Validation failed"
@@ -46,7 +67,38 @@ class SettingsViewModel(
                     return@launch
                 }
 
-                configRepository.updateConfig(newConfig)
+                val currentConfig = _config.value
+                val credentialsChanged = currentConfig == null ||
+                    currentConfig.krakenApiKey.trim() != normalizedConfig.krakenApiKey.trim() ||
+                    currentConfig.krakenApiSecret.trim() != normalizedConfig.krakenApiSecret.trim() ||
+                    currentConfig.apiTimeout != normalizedConfig.apiTimeout
+
+                if (credentialsChanged) {
+                    val credentialsValidation = validateKrakenCredentials(normalizedConfig)
+                    when (credentialsValidation.status) {
+                        CredentialsValidationStatus.INVALID -> {
+                            _saveState.value = SaveState.Error(
+                                credentialsValidation.message
+                                    ?: "Kraken credentials validation failed"
+                            )
+                            return@launch
+                        }
+
+                        CredentialsValidationStatus.UNVERIFIED -> {
+                            configRepository.updateConfig(normalizedConfig)
+                            _saveState.value = SaveState.Warning(
+                                "Saved (unverified). Kraken check unavailable: ${credentialsValidation.message ?: "try again later"}"
+                            )
+                            kotlinx.coroutines.delay(3000)
+                            _saveState.value = SaveState.Idle
+                            return@launch
+                        }
+
+                        CredentialsValidationStatus.VALID -> Unit
+                    }
+                }
+
+                configRepository.updateConfig(normalizedConfig)
                 _saveState.value = SaveState.Success("Settings saved successfully")
 
                 // Reset state after 2 seconds
@@ -55,6 +107,124 @@ class SettingsViewModel(
             } catch (e: Exception) {
                 _saveState.value = SaveState.Error(e.message ?: "Failed to save settings")
             }
+        }
+    }
+
+    private fun normalizeCredentials(config: TradingConfig): TradingConfig {
+        fun clean(value: String): String {
+            return value
+                .replace('’', '\'')
+                .replace('\u00A0', ' ')
+                .replace("\\s+".toRegex(), "")
+                .trim()
+        }
+
+        return config.copy(
+            krakenApiKey = clean(config.krakenApiKey),
+            krakenApiSecret = clean(config.krakenApiSecret)
+        )
+    }
+
+    private suspend fun validateKrakenCredentials(config: TradingConfig): CredentialsValidationResult {
+        val apiKey = config.krakenApiKey.trim()
+        val apiSecret = config.krakenApiSecret.trim()
+
+        if (apiKey.isEmpty() && apiSecret.isEmpty()) {
+            return CredentialsValidationResult(CredentialsValidationStatus.VALID)
+        }
+
+        if (apiKey.isEmpty() || apiSecret.isEmpty()) {
+            return CredentialsValidationResult(
+                status = CredentialsValidationStatus.INVALID,
+                message = "Both Kraken API key and secret are required"
+            )
+        }
+
+        return try {
+            val validationClient = KrakenApiClient(
+                apiKey = apiKey,
+                apiSecret = apiSecret,
+                timeout = config.apiTimeout
+            )
+
+            try {
+                val connectivityResult = validationClient.getServerTime()
+                if (connectivityResult.isFailure) {
+                    return CredentialsValidationResult(
+                        status = CredentialsValidationStatus.UNVERIFIED,
+                        message = mapKrakenError(connectivityResult.exceptionOrNull())
+                    )
+                }
+
+                val balanceResult = validationClient.getAccountBalance()
+                if (balanceResult.isSuccess) {
+                    CredentialsValidationResult(CredentialsValidationStatus.VALID)
+                } else {
+                    val errorMessage = mapKrakenError(balanceResult.exceptionOrNull())
+                    val isInvalid = isInvalidCredentialsError(balanceResult.exceptionOrNull()?.message)
+                    CredentialsValidationResult(
+                        status = if (isInvalid) CredentialsValidationStatus.INVALID else CredentialsValidationStatus.UNVERIFIED,
+                        message = errorMessage
+                    )
+                }
+            } finally {
+                // Release the short-lived OkHttp dispatcher and connection pool
+                // immediately instead of waiting for GC.
+                validationClient.close()
+            }
+        } catch (e: Exception) {
+            val isInvalid = isInvalidCredentialsError(e.message)
+            CredentialsValidationResult(
+                status = if (isInvalid) CredentialsValidationStatus.INVALID else CredentialsValidationStatus.UNVERIFIED,
+                message = mapKrakenError(e)
+            )
+        }
+    }
+
+    private fun isInvalidCredentialsError(rawMessage: String?): Boolean {
+        val message = rawMessage?.trim().orEmpty()
+        return message.contains("EAPI:Invalid key", ignoreCase = true) ||
+            message.contains("EAPI:Invalid signature", ignoreCase = true) ||
+            message.contains("EGeneral:Permission denied", ignoreCase = true)
+    }
+
+    private fun mapKrakenError(throwable: Throwable?): String {
+        val message = throwable?.message?.trim().orEmpty()
+        val errorType = throwable?.javaClass?.simpleName ?: "UnknownError"
+
+        return when (throwable) {
+            is UnknownHostException, is ConnectException ->
+                "Unable to reach Kraken. Check internet connection and try again."
+
+            is SocketTimeoutException ->
+                "Kraken verification timed out. Try again or increase API timeout."
+
+            is SSLException ->
+                "Secure connection to Kraken failed. Check device date/time and network."
+
+            else -> mapKrakenMessage(message, errorType)
+        }
+    }
+
+    private fun mapKrakenMessage(message: String, errorType: String): String {
+        return when {
+            message.contains("EAPI:Invalid key", ignoreCase = true) ||
+                message.contains("EAPI:Invalid signature", ignoreCase = true) ->
+                "Kraken credentials are invalid. Check API key/secret and remove spaces or line breaks."
+
+            message.contains("EAPI:Bad request", ignoreCase = true) ->
+                "Kraken rejected the request format. Verify API secret and try again."
+
+            message.contains("EAPI:Invalid nonce", ignoreCase = true) ->
+                "Device time seems out of sync. Enable automatic date/time and retry."
+
+            message.contains("EGeneral:Permission denied", ignoreCase = true) ->
+                "Kraken API key is valid but missing required permissions (Query Funds)."
+
+            message.isBlank() ->
+                "Unable to verify Kraken credentials. Check internet and API permissions. (type: $errorType)"
+
+            else -> "Kraken credentials validation failed [$errorType]: $message"
         }
     }
 
@@ -78,5 +248,6 @@ sealed class SaveState {
     object Idle : SaveState()
     object Saving : SaveState()
     data class Success(val message: String) : SaveState()
+    data class Warning(val message: String) : SaveState()
     data class Error(val message: String) : SaveState()
 }

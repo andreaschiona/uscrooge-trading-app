@@ -2,9 +2,18 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("com.google.dagger.hilt.android")
 }
 
+import java.util.Properties
+
 android {
+    val keystoreProperties = Properties()
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(keystorePropertiesFile.inputStream())
+    }
+
     namespace = "com.uscrooge.app"
     compileSdk = 34
 
@@ -12,8 +21,8 @@ android {
         applicationId = "com.uscrooge.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 6
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,9 +30,33 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                val missing = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+                    .filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+                if (missing.isNotEmpty()) {
+                    error(
+                        "keystore.properties is present but missing required keys: " +
+                            "${missing.joinToString()}. See keystore.properties.example."
+                    )
+                }
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -97,6 +130,13 @@ dependencies {
 
     // WorkManager for background tasks
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Hilt - Dependency Injection
+    implementation("com.google.dagger:hilt-android:2.50")
+    ksp("com.google.dagger:hilt-android-compiler:2.50")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Charts
     implementation("com.patrykandpatrick.vico:compose:1.13.1")

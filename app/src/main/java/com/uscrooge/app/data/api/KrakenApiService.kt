@@ -25,7 +25,7 @@ interface KrakenApiService {
         @Query("pair") pair: String,
         @Query("interval") interval: Int = 60,  // in minutes
         @Query("since") since: Long? = null
-    ): Response<KrakenResponse<OHLCResponse>>
+    ): Response<KrakenResponse<Map<String, Any>>>
 
     @GET("0/public/Depth")
     suspend fun getOrderBook(

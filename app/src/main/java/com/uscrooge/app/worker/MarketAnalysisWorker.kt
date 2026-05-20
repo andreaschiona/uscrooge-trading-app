@@ -1,30 +1,61 @@
 package com.uscrooge.app.worker
 
 import android.content.Context
-import androidx.work.*
-import com.uscrooge.app.UScroogeApplication
-import com.uscrooge.app.data.model.SignalStatus
+import androidx.hilt.work.HiltWorker
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.data.repository.TradingRepository
+import com.uscrooge.app.di.BrokerRegistry
+import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.notification.NotificationHelper
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
+import android.util.Log
 import java.util.concurrent.TimeUnit
 
-class MarketAnalysisWorker(
-    context: Context,
-    workerParams: WorkerParameters
+@HiltWorker
+class MarketAnalysisWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted workerParams: WorkerParameters,
+    private val repository: TradingRepository,
+    private val configRepository: ConfigRepository,
+    private val brokerRegistry: BrokerRegistry,
+    private val orderExecutor: OrderExecutor,
+    private val notificationHelper: NotificationHelper
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
         return try {
-            val app = applicationContext as UScroogeApplication
-            val repository = app.tradingRepository
-            val configRepository = app.configRepository
-            val orderExecutor = app.orderExecutor
-            val notificationHelper = NotificationHelper(applicationContext)
-
             val config = configRepository.configFlow.first()
+
+            // Ensure KrakenApiClient credentials, strategy and executor reflect
+            // the current config before any API call. On cold start the
+            // BrokerRegistry.start() collector may not have emitted yet, so the
+            // singleton client could otherwise be holding empty credentials.
+            brokerRegistry.applyConfig(config)
 
             // Analyze all trading pairs
             val signals = repository.analyzeAllPairs(config)
+
+            // Notify analysis errors
+            val analysisLog = repository.lastAnalysisLog.value
+            if (config.notifyOnErrors && analysisLog != null && analysisLog.errorCount > 0) {
+                val errorPairs = analysisLog.entries
+                    .filter { !it.isSuccess }
+                    .joinToString(", ") { "${it.pair}: ${it.errorMessage}" }
+                notificationHelper.sendErrorNotification(
+                    "Analysis errors (${analysisLog.errorCount}/${analysisLog.totalCount})",
+                    errorPairs
+                )
+            }
 
             // Send notifications for new signals
             if (config.notifyOnSignals && signals.isNotEmpty()) {
@@ -69,6 +100,16 @@ class MarketAnalysisWorker(
 
             Result.success()
         } catch (e: Exception) {
+            Log.e("MarketAnalysisWorker", "doWork failed: ${e.message}", e)
+            try {
+                val config = configRepository.configFlow.first()
+                if (config.notifyOnErrors) {
+                    notificationHelper.sendErrorNotification(
+                        "Market analysis failed",
+                        e.message ?: "Unknown error"
+                    )
+                }
+            } catch (_: Exception) { }
             Result.retry()
         }
     }

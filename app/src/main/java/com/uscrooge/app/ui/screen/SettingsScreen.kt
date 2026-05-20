@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -79,6 +80,14 @@ fun SettingsScreen(
                 Snackbar(
                     modifier = Modifier.padding(vertical = 8.dp),
                     containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(state.message)
+                }
+            }
+            is SaveState.Warning -> {
+                Snackbar(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
                 ) {
                     Text(state.message)
                 }
@@ -341,6 +350,11 @@ fun SettingsScreen(
                                 },
                                 label = { Text("API Key") },
                                 modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Ascii
+                                ),
                                 singleLine = true
                             )
 
@@ -352,6 +366,11 @@ fun SettingsScreen(
                                 label = { Text("API Secret") },
                                 modifier = Modifier.fillMaxWidth(),
                                 visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Ascii
+                                ),
                                 singleLine = true
                             )
 

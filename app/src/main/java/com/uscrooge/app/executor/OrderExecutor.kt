@@ -7,15 +7,29 @@ import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.abs
 
-class OrderExecutor(
+@Singleton
+class OrderExecutor @Inject constructor(
     private val apiClient: KrakenApiClient,
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
-    private val positionDao: PositionDao,
-    private val config: TradingConfig
+    private val positionDao: PositionDao
 ) {
+
+    @Volatile
+    private var config: TradingConfig = TradingConfig()
+
+    /**
+     * Updates the active [TradingConfig] used for slippage limits, fees and
+     * sizing. Called by [com.uscrooge.app.di.BrokerRegistry] whenever the user
+     * changes Settings. Must remain cheap and side-effect free.
+     */
+    fun updateConfig(newConfig: TradingConfig) {
+        this.config = newConfig
+    }
 
     suspend fun executeSignal(signal: TradingSignal): Result<Order> {
         return try {

@@ -6,6 +6,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 class KrakenApiClient(
     apiKey: String = "",
@@ -29,6 +30,31 @@ class KrakenApiClient(
     @Volatile
     private var apiServiceCacheKey: String = ""
 
+    @Volatile
+    private var okHttpClientCache: OkHttpClient? = null
+
+    companion object {
+        // Kraken requires strictly-increasing nonces per API key. Unit is
+        // nanoseconds-since-epoch (System.currentTimeMillis() * 1_000_000) which
+        // is ~1000x the older "* 1000" microsecond formula. This change is
+        // intentional and IRREVERSIBLE per API key: once a large nonce has been
+        // accepted, reverting to a smaller unit will cause every subsequent
+        // request to fail with EAPI:Invalid nonce until the user issues a new
+        // API key (or a wider nonce window on Kraken's side).
+        private val globalNonce = AtomicLong(0L)
+
+        private fun nextNonce(): Long {
+            while (true) {
+                val now = System.currentTimeMillis() * 1_000_000L
+                val last = globalNonce.get()
+                val candidate = if (now > last) now else last + 1L
+                if (globalNonce.compareAndSet(last, candidate)) {
+                    return candidate
+                }
+            }
+        }
+    }
+
     fun updateCredentials(
         apiKey: String,
         apiSecret: String,
@@ -46,10 +72,39 @@ class KrakenApiClient(
             this.timeout = timeout
 
             if (changed) {
+                shutdownCachedOkHttpClient()
                 apiServiceCache = null
                 apiServiceCacheKey = ""
             }
         }
+    }
+
+    /**
+     * Releases the cached OkHttp dispatcher executor and connection pool.
+     * Safe to call from short-lived [KrakenApiClient] instances (e.g. one-off
+     * credential validation) to avoid leaking idle threads and sockets until
+     * the next GC.
+     */
+    fun close() {
+        synchronized(this) {
+            shutdownCachedOkHttpClient()
+            apiServiceCache = null
+            apiServiceCacheKey = ""
+        }
+    }
+
+    private fun shutdownCachedOkHttpClient() {
+        okHttpClientCache?.let { client ->
+            try {
+                client.dispatcher.executorService.shutdown()
+            } catch (_: Exception) {
+            }
+            try {
+                client.connectionPool.evictAll()
+            } catch (_: Exception) {
+            }
+        }
+        okHttpClientCache = null
     }
 
     private fun getApiService(): KrakenApiService {
@@ -87,11 +142,34 @@ class KrakenApiClient(
             val service = retrofit.create(KrakenApiService::class.java)
             apiServiceCache = service
             apiServiceCacheKey = cacheKey
+            okHttpClientCache = okHttpClient
             return service
         }
     }
 
     // Public API methods
+
+    suspend fun getServerTime(): Result<Long> {
+        return try {
+            val response = getApiService().getServerTime()
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return Result.failure(Exception(body.error.joinToString()))
+                }
+
+                val unixTime = body.result?.unixtime
+                    ?: return Result.failure(Exception("No server time data"))
+
+                Result.success(unixTime)
+            } else {
+                Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun getTicker(pair: TradingPair): Result<Ticker> {
         return try {
@@ -146,8 +224,13 @@ class KrakenApiClient(
 
                 // Parse OHLC data from dynamic response
                 val result = body.result as? Map<*, *>
-                val ohlcData = result?.get(krakenPair) as? List<*>
-                    ?: return Result.failure(Exception("No OHLC data"))
+                // Kraken may return the pair key in a different format than requested;
+                // look for the first key that is not "last" (metadata field).
+                val ohlcData = (result?.get(krakenPair) as? List<*>)
+                    ?: (result?.entries
+                        ?.firstOrNull { it.key != "last" && it.value is List<*> }
+                        ?.value as? List<*>)
+                    ?: return Result.failure(Exception("No OHLC data for pair $krakenPair"))
 
                 val ohlcList = ohlcData.mapNotNull { item ->
                     val array = item as? List<*> ?: return@mapNotNull null
@@ -219,7 +302,7 @@ class KrakenApiClient(
 
     suspend fun getAccountBalance(): Result<Map<String, Double>> {
         return try {
-            val nonce = System.currentTimeMillis() * 1000
+            val nonce = nextNonce()
             val response = getApiService().getAccountBalance(nonce)
 
             if (response.isSuccessful && response.body() != null) {
@@ -242,7 +325,7 @@ class KrakenApiClient(
 
     suspend fun getTradeBalance(asset: String = "ZEUR"): Result<TradeBalance> {
         return try {
-            val nonce = System.currentTimeMillis() * 1000
+            val nonce = nextNonce()
             val response = getApiService().getTradeBalance(nonce, asset)
 
             if (response.isSuccessful && response.body() != null) {
@@ -272,7 +355,7 @@ class KrakenApiClient(
         validate: Boolean = false
     ): Result<String> {
         return try {
-            val nonce = System.currentTimeMillis() * 1000
+            val nonce = nextNonce()
             val krakenPair = pair.toKrakenSymbol()
 
             val response = getApiService().addOrder(
@@ -305,7 +388,7 @@ class KrakenApiClient(
 
     suspend fun cancelOrder(orderId: String): Result<Boolean> {
         return try {
-            val nonce = System.currentTimeMillis() * 1000
+            val nonce = nextNonce()
             val response = getApiService().cancelOrder(nonce, orderId)
 
             if (response.isSuccessful && response.body() != null) {
@@ -325,7 +408,7 @@ class KrakenApiClient(
 
     suspend fun getOpenOrders(): Result<Map<String, OrderInfo>> {
         return try {
-            val nonce = System.currentTimeMillis() * 1000
+            val nonce = nextNonce()
             val response = getApiService().getOpenOrders(nonce)
 
             if (response.isSuccessful && response.body() != null) {

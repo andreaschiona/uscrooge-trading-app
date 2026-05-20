@@ -6,13 +6,16 @@ import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.data.model.Position
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.TradingRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class DashboardViewModel(
+@HiltViewModel
+class DashboardViewModel @Inject constructor(
     private val repository: TradingRepository,
     private val configRepository: ConfigRepository
 ) : ViewModel() {

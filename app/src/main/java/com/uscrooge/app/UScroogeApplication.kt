@@ -1,71 +1,44 @@
 package com.uscrooge.app
 
 import android.app.Application
-import com.uscrooge.app.analysis.TechnicalAnalyzer
-import com.uscrooge.app.data.api.KrakenApiClient
-import com.uscrooge.app.data.local.TradingDatabase
-import com.uscrooge.app.data.repository.ConfigRepository
-import com.uscrooge.app.data.repository.TradingRepository
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
+import com.uscrooge.app.di.ApplicationScope
+import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.strategy.TradingStrategy
+import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class UScroogeApplication : Application() {
+@HiltAndroidApp
+class UScroogeApplication : Application(), Configuration.Provider {
 
-    // Database
-    private val database by lazy { TradingDatabase.getDatabase(this) }
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
 
-    // Repositories
-    val configRepository by lazy { ConfigRepository(this) }
+    @Inject
+    lateinit var brokerRegistry: BrokerRegistry
 
-    // Technical Analyzer
-    private val technicalAnalyzer by lazy { TechnicalAnalyzer() }
+    @Inject
+    lateinit var tradingStrategy: TradingStrategy
 
-    // API Client (lazy initialized with default empty credentials)
-    val krakenApiClient by lazy {
-        KrakenApiClient(
-            apiKey = "",
-            apiSecret = "",
-            timeout = 30000L
-        )
-    }
+    @Inject
+    lateinit var orderExecutor: OrderExecutor
 
-    // Strategy (lazy initialized with default config)
-    val tradingStrategy by lazy {
-        TradingStrategy(
-            config = com.uscrooge.app.data.model.TradingConfig(),
-            analyzer = technicalAnalyzer
-        )
-    }
-
-    // Trading Repository
-    val tradingRepository by lazy {
-        TradingRepository(
-            apiClient = krakenApiClient,
-            signalDao = database.signalDao(),
-            orderDao = database.orderDao(),
-            positionDao = database.positionDao(),
-            strategy = tradingStrategy
-        )
-    }
-
-    // Order Executor
-    val orderExecutor by lazy {
-        OrderExecutor(
-            apiClient = krakenApiClient,
-            signalDao = database.signalDao(),
-            orderDao = database.orderDao(),
-            positionDao = database.positionDao(),
-            config = com.uscrooge.app.data.model.TradingConfig()
-        )
-    }
+    @Inject
+    @ApplicationScope
+    lateinit var appScope: CoroutineScope
 
     override fun onCreate() {
         super.onCreate()
-        // Initialization happens lazily when components are first accessed
+        // Start observing config changes so KrakenApiClient credentials,
+        // TradingStrategy and OrderExecutor stay in sync with Settings.
+        brokerRegistry.start(appScope, tradingStrategy, orderExecutor)
     }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 }

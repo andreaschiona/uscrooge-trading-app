@@ -2,6 +2,7 @@ package com.uscrooge.app.data.repository
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
@@ -11,7 +12,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "trading_config")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "trading_config",
+    corruptionHandler = ReplaceFileCorruptionHandler(
+        produceNewData = { emptyPreferences() }
+    )
+)
 
 class ConfigRepository(private val context: Context) {
 

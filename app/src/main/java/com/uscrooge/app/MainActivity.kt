@@ -7,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,12 +14,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.ui.screen.DashboardScreen
 import com.uscrooge.app.ui.screen.SettingsScreen
 import com.uscrooge.app.ui.screen.SignalsScreen
@@ -29,10 +31,16 @@ import com.uscrooge.app.ui.viewmodel.DashboardViewModel
 import com.uscrooge.app.ui.viewmodel.SettingsViewModel
 import com.uscrooge.app.ui.viewmodel.SignalsViewModel
 import com.uscrooge.app.worker.MarketAnalysisWorker
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var configRepository: ConfigRepository
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -60,19 +68,16 @@ class MainActivity : ComponentActivity() {
             scheduleBackgroundWork()
         }
 
-        val app = application as UScroogeApplication
-
         setContent {
             UScroogeAppTheme {
-                MainScreen(app)
+                MainScreen()
             }
         }
     }
 
     private fun scheduleBackgroundWork() {
-        val app = application as UScroogeApplication
         lifecycleScope.launch {
-            val config = app.configRepository.configFlow.first()
+            val config = configRepository.configFlow.first()
             val intervalMinutes = (config.checkIntervalSeconds / 60).toLong()
             MarketAnalysisWorker.schedule(this@MainActivity, intervalMinutes)
         }
@@ -81,7 +86,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(app: UScroogeApplication) {
+fun MainScreen() {
     val navController = rememberNavController()
 
     Scaffold(
@@ -119,23 +124,17 @@ fun MainScreen(app: UScroogeApplication) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Dashboard.route) {
-                val viewModel = remember {
-                    DashboardViewModel(app.tradingRepository, app.configRepository)
-                }
+                val viewModel: DashboardViewModel = hiltViewModel()
                 DashboardScreen(viewModel)
             }
 
             composable(Screen.Signals.route) {
-                val viewModel = remember {
-                    SignalsViewModel(app.tradingRepository, app.orderExecutor)
-                }
+                val viewModel: SignalsViewModel = hiltViewModel()
                 SignalsScreen(viewModel)
             }
 
             composable(Screen.Settings.route) {
-                val viewModel = remember {
-                    SettingsViewModel(app.configRepository)
-                }
+                val viewModel: SettingsViewModel = hiltViewModel()
                 SettingsScreen(viewModel)
             }
         }

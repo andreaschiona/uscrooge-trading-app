@@ -30,3 +30,6 @@ build/
 .vscode/
 .local/
 .kraken.local.properties
+keystore.properties
+*.jks
+*.keystore

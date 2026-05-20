@@ -8,9 +8,15 @@ import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.strategy.TradingStrategy
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class TradingRepository(
+@Singleton
+class TradingRepository @Inject constructor(
     private val apiClient: KrakenApiClient,
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
@@ -21,6 +27,9 @@ class TradingRepository(
         private const val TAG = "TradingRepository"
         private val EUR_ASSETS = setOf("ZEUR", "EUR", "XEUR")
     }
+
+    private val _lastAnalysisLog = MutableStateFlow<AnalysisLog?>(null)
+    val lastAnalysisLog: StateFlow<AnalysisLog?> = _lastAnalysisLog.asStateFlow()
 
     private fun String.normalizeKrakenAsset(): String = uppercase().substringBefore('.')
 
@@ -220,15 +229,49 @@ class TradingRepository(
 
     suspend fun analyzeAllPairs(config: TradingConfig): List<TradingSignal> {
         val signals = mutableListOf<TradingSignal>()
+        val logEntries = mutableListOf<AnalysisLogEntry>()
 
         for (pair in config.tradingPairs) {
             try {
                 val result = analyzePairAndGenerateSignal(pair, config)
-                result.getOrNull()?.let { signals.add(it) }
+                if (result.isSuccess) {
+                    val signal = result.getOrNull()
+                    signal?.let { signals.add(it) }
+                    logEntries.add(
+                        AnalysisLogEntry(
+                            pair = pair,
+                            isSuccess = true,
+                            signalType = signal?.type,
+                            strength = signal?.strength
+                        )
+                    )
+                } else {
+                    val error = result.exceptionOrNull()
+                    Log.w(TAG, "Analysis failed for $pair: ${error?.message}", error)
+                    logEntries.add(
+                        AnalysisLogEntry(
+                            pair = pair,
+                            isSuccess = false,
+                            errorMessage = error?.message ?: "Unknown error"
+                        )
+                    )
+                }
             } catch (e: Exception) {
-                // Continue with next pair
+                Log.e(TAG, "Unexpected error analyzing $pair: ${e.message}", e)
+                logEntries.add(
+                    AnalysisLogEntry(
+                        pair = pair,
+                        isSuccess = false,
+                        errorMessage = e.message ?: "Unexpected error"
+                    )
+                )
             }
         }
+
+        _lastAnalysisLog.value = AnalysisLog(
+            timestamp = System.currentTimeMillis(),
+            entries = logEntries
+        )
 
         return signals
     }

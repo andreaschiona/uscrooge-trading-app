@@ -3,13 +3,26 @@ package com.uscrooge.app.strategy
 import com.google.gson.Gson
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.model.*
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.min
 
-class TradingStrategy(
-    private val config: TradingConfig,
-    private val analyzer: TechnicalAnalyzer = TechnicalAnalyzer()
+@Singleton
+class TradingStrategy @Inject constructor(
+    private val analyzer: TechnicalAnalyzer
 ) {
+
+    @Volatile
+    private var config: TradingConfig = TradingConfig()
+
+    /**
+     * Updates the active [TradingConfig]. Called by
+     * [com.uscrooge.app.di.BrokerRegistry] whenever the user changes Settings.
+     */
+    fun updateConfig(newConfig: TradingConfig) {
+        this.config = newConfig
+    }
 
     fun generateSignal(
         pair: String,

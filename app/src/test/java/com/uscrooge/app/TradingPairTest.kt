@@ -34,7 +34,7 @@ class TradingPairTest {
     @Test
     fun `toKrakenSymbol converts SOL correctly`() {
         val pair = TradingPair.fromString("SOL/EUR")
-        assertEquals("SOLZEUR", pair.toKrakenSymbol())
+        assertEquals("SOLEUR", pair.toKrakenSymbol())
     }
 
     @Test

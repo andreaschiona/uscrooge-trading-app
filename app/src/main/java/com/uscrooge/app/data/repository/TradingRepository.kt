@@ -361,7 +361,8 @@ class TradingRepository @Inject constructor(
                             trend = analysis.trend.name,
                             volumeRatio = analysis.volume.volumeRatio,
                             candlestickPattern = analysis.candlestickPattern?.name,
-                            availableBalance = availableBalance
+                            availableBalance = availableBalance,
+                            broker = "Kraken"
                         )
                     )
                 } else {
@@ -371,7 +372,8 @@ class TradingRepository @Inject constructor(
                         AnalysisLogEntry(
                             pair = pair,
                             isSuccess = false,
-                            errorMessage = error?.message ?: "Unknown error"
+                            errorMessage = error?.message ?: "Unknown error",
+                            broker = "Kraken"
                         )
                     )
                 }
@@ -381,7 +383,8 @@ class TradingRepository @Inject constructor(
                     AnalysisLogEntry(
                         pair = pair,
                         isSuccess = false,
-                        errorMessage = e.message ?: "Unexpected error"
+                        errorMessage = e.message ?: "Unexpected error",
+                        broker = "Kraken"
                     )
                 )
             }
@@ -410,7 +413,8 @@ class TradingRepository @Inject constructor(
                                 trend = analysis.trend.name,
                                 volumeRatio = analysis.volume.volumeRatio,
                                 candlestickPattern = analysis.candlestickPattern?.name,
-                                availableBalance = availableBalance
+                                availableBalance = availableBalance,
+                                broker = "Alpaca"
                             )
                         )
                     } else {
@@ -420,7 +424,8 @@ class TradingRepository @Inject constructor(
                             AnalysisLogEntry(
                                 pair = pair,
                                 isSuccess = false,
-                                errorMessage = error?.message ?: "Unknown error"
+                                errorMessage = error?.message ?: "Unknown error",
+                                broker = "Alpaca"
                             )
                         )
                     }
@@ -430,7 +435,8 @@ class TradingRepository @Inject constructor(
                         AnalysisLogEntry(
                             pair = pair,
                             isSuccess = false,
-                            errorMessage = e.message ?: "Unexpected error"
+                            errorMessage = e.message ?: "Unexpected error",
+                            broker = "Alpaca"
                         )
                     )
                 }

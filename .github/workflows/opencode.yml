@@ -51,4 +51,4 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_TELEMETRY: false
         with:
-          model: opencode/big-pickle
+          model: opencode/claude-sonnet-4-5

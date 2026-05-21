@@ -21,8 +21,8 @@ android {
         applicationId = "com.uscrooge.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.2.9"
+        versionCode = 17
+        versionName = "1.2.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -28,5 +28,5 @@ data class AnalysisLogEntry(
     val volumeRatio: Double? = null,
     val candlestickPattern: String? = null,
     val availableBalance: Double? = null,
-    val broker: String = "Kraken"
+    val broker: String? = null
 )

@@ -558,12 +558,28 @@ fun AnalysisLogEntryRow(entry: AnalysisLogEntry) {
                     }
                 )
             } else {
-                Text(
-                    text = entry.errorMessage ?: "Error",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFE57373),
-                    maxLines = 1
-                )
+                var expanded by remember { mutableStateOf(false) }
+                Column {
+                    Text(
+                        text = entry.errorMessage ?: "Error",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFE57373),
+                        maxLines = if (expanded) Int.MAX_VALUE else 1
+                    )
+                    if ((entry.errorMessage?.length ?: 0) > 50) {
+                        TextButton(
+                            onClick = { expanded = !expanded },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            modifier = Modifier.height(24.dp)
+                        ) {
+                            Text(
+                                text = if (expanded) "Show less" else "Show more",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFE57373)
+                            )
+                        }
+                    }
+                }
             }
         }
 

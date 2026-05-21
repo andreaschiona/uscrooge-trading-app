@@ -1,5 +1,8 @@
 package com.uscrooge.app.data.api
 
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.uscrooge.app.data.model.*
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -195,6 +198,19 @@ class AlpacaApiClient(
 
     // === BrokerApi Implementation ===
 
+    private fun extractErrorMessage(response: retrofit2.Response<*>): String {
+        return try {
+            val errorBody = response.errorBody()?.string()
+            if (errorBody.isNullOrBlank()) {
+                "HTTP ${response.code()} ${response.message()}"
+            } else {
+                "HTTP ${response.code()}: $errorBody"
+            }
+        } catch (_: Exception) {
+            "HTTP ${response.code()} ${response.message()}"
+        }
+    }
+
     override suspend fun getTicker(symbol: String): Result<Ticker> {
         return try {
             val normalizedSymbol = normalizeSymbol(symbol)
@@ -224,10 +240,13 @@ class AlpacaApiClient(
                     )
                 )
             } else {
-                Result.failure(Exception("Alpaca API error: ${response.code()} - ${response.errorBody()?.string()}"))
+                val errorMsg = extractErrorMessage(response)
+                Log.w(TAG, "getTicker failed for $symbol: $errorMsg")
+                Result.failure(Exception("Alpaca ticker error: $errorMsg"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Log.e(TAG, "getTicker exception for $symbol: ${e.message}", e)
+            Result.failure(Exception("Alpaca ticker error: ${e.message}"))
         }
     }
 
@@ -237,36 +256,41 @@ class AlpacaApiClient(
             val timeframe = intervalToTimeframe(interval)
             val now = ZonedDateTime.now(java.time.ZoneOffset.UTC)
             val startTime = when {
-                interval <= 60 -> now.minus(2, ChronoUnit.DAYS)
-                interval <= 360 -> now.minus(7, ChronoUnit.DAYS)
-                interval <= 1440 -> now.minus(30, ChronoUnit.DAYS)
-                else -> now.minus(90, ChronoUnit.DAYS)
+                interval <= 60 -> now.minus(7, ChronoUnit.DAYS)
+                interval <= 360 -> now.minus(30, ChronoUnit.DAYS)
+                interval <= 1440 -> now.minus(90, ChronoUnit.DAYS)
+                else -> now.minus(180, ChronoUnit.DAYS)
             }
 
-            val response = getDataApiService().getStockBars(
+            val response = getDataApiService().getStockBarsRaw(
                 symbol = normalizedSymbol,
                 timeframe = timeframe,
                 start = startTime.format(DateTimeFormatter.ISO_INSTANT),
-                limit = 1000
+                limit = 5000
             )
 
             if (response.isSuccessful && response.body() != null) {
-                val bars = response.body()!!.bars[normalizedSymbol]
-                    ?: response.body()!!.bars.values.firstOrNull()
+                val jsonString = response.body()!!.string()
+                val gson = Gson()
+                val type = object : TypeToken<Map<String, Any>>() {}.type
+                val jsonMap: Map<String, Any> = gson.fromJson(jsonString, type)
+
+                @Suppress("UNCHECKED_CAST")
+                val barsList = (jsonMap["bars"] as? Map<String, List<Map<String, Any>>>)?.get(normalizedSymbol)
+                    ?: (jsonMap["bars"] as? Map<String, List<Map<String, Any>>>)?.values?.firstOrNull()
                     ?: emptyList()
 
-                val ohlcList = bars.mapNotNull { bar ->
+                val ohlcList = barsList.mapNotNull { bar ->
                     try {
-                        val timestamp = Instant.parse(bar.t).toEpochMilli()
                         OHLC(
-                            time = timestamp,
-                            open = bar.o,
-                            high = bar.h,
-                            low = bar.l,
-                            close = bar.c,
-                            vwap = bar.vw ?: bar.c,
-                            volume = bar.v.toDouble(),
-                            count = bar.n
+                            time = (bar["t"] as? String)?.let { Instant.parse(it).toEpochMilli() } ?: 0L,
+                            open = (bar["o"] as? Double) ?: (bar["o"] as? Number)?.toDouble() ?: 0.0,
+                            high = (bar["h"] as? Double) ?: (bar["h"] as? Number)?.toDouble() ?: 0.0,
+                            low = (bar["l"] as? Double) ?: (bar["l"] as? Number)?.toDouble() ?: 0.0,
+                            close = (bar["c"] as? Double) ?: (bar["c"] as? Number)?.toDouble() ?: 0.0,
+                            vwap = (bar["vw"] as? Double) ?: (bar["vw"] as? Number)?.toDouble() ?: 0.0,
+                            volume = (bar["v"] as? Number)?.toDouble() ?: 0.0,
+                            count = (bar["n"] as? Number)?.toInt() ?: 0
                         )
                     } catch (e: Exception) {
                         null
@@ -274,15 +298,20 @@ class AlpacaApiClient(
                 }
 
                 if (ohlcList.isEmpty()) {
-                    Result.failure(Exception("No OHLC data for $symbol"))
+                    val msg = "No OHLC data for $symbol (timeframe=$timeframe)"
+                    Log.w(TAG, msg)
+                    Result.failure(Exception(msg))
                 } else {
                     Result.success(ohlcList)
                 }
             } else {
-                Result.failure(Exception("Alpaca API error: ${response.code()} - ${response.errorBody()?.string()}"))
+                val errorMsg = extractErrorMessage(response)
+                Log.w(TAG, "getOHLC failed for $symbol: $errorMsg")
+                Result.failure(Exception("Alpaca OHLC error: $errorMsg"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Log.e(TAG, "getOHLC exception for $symbol: ${e.message}", e)
+            Result.failure(Exception("Alpaca OHLC error: ${e.message}"))
         }
     }
 

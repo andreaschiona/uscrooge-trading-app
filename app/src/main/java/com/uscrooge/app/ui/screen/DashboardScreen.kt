@@ -306,7 +306,7 @@ fun PositionCard(position: Position) {
 }
 
 @Composable
-fun BrokerBadge(broker: String) {
+fun BrokerBadge(broker: String?) {
     val (label, color) = when (broker) {
         "Alpaca" -> "STOCK" to Color(0xFF2196F3)
         else -> "CRYPTO" to Color(0xFFFF9800)

@@ -1,5 +1,6 @@
 package com.uscrooge.app.data.api
 
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -38,14 +39,14 @@ interface AlpacaApiService {
 
     // Market Data (via data.alpaca.markets - separate base URL)
     @GET("v2/stocks/{symbol}/bars")
-    suspend fun getStockBars(
+    suspend fun getStockBarsRaw(
         @Path("symbol") symbol: String,
         @Query("timeframe") timeframe: String,
         @Query("start") start: String,
         @Query("limit") limit: Int = 1000,
         @Query("adjustment") adjustment: String = "raw",
         @Query("feed") feed: String = "iex"
-    ): Response<AlpacaBarsResponse>
+    ): Response<ResponseBody>
 
     @GET("v2/stocks/{symbol}/quotes/latest")
     suspend fun getLatestQuote(
@@ -56,7 +57,7 @@ interface AlpacaApiService {
     @GET("v2/stocks/{symbol}/trades/latest")
     suspend fun getLatestTrade(
         @Path("symbol") symbol: String,
-        @Query("feed") feed: String = "sip"
+        @Query("feed") feed: String = "iex"
     ): Response<AlpacaLatestTradeResponse>
 
     // Clock (market hours)
@@ -183,7 +184,7 @@ data class AlpacaPosition(
 
 // Market data models
 data class AlpacaBarsResponse(
-    val bars: Map<String, List<AlpacaBar>>,
+    val bars: Map<String, List<AlpacaBar>>?,
     val next_page_token: String?
 )
 

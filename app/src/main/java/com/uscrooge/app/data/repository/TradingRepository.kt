@@ -5,11 +5,14 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.uscrooge.app.analysis.TechnicalAnalyzer
+import com.uscrooge.app.data.api.AlpacaApiClient
+import com.uscrooge.app.data.api.BrokerApi
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
+import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,7 +27,9 @@ import javax.inject.Singleton
 @Singleton
 class TradingRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val apiClient: KrakenApiClient,
+    private val krakenApiClient: KrakenApiClient,
+    private val alpacaApiClient: AlpacaApiClient,
+    private val brokerRegistry: BrokerRegistry,
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
@@ -35,6 +40,7 @@ class TradingRepository @Inject constructor(
         private val EUR_ASSETS = setOf("ZEUR", "EUR", "XEUR")
         private const val PREFS_NAME = "analysis_log_prefs"
         private const val KEY_LAST_LOG = "last_analysis_log"
+        private val CRYPTO_ASSETS = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
     }
 
     private val gson = Gson()
@@ -45,7 +51,6 @@ class TradingRepository @Inject constructor(
     val lastAnalysisLog: StateFlow<AnalysisLog?> = _lastAnalysisLog.asStateFlow()
 
     init {
-        // Restore persisted analysis log
         val json = prefs.getString(KEY_LAST_LOG, null)
         if (json != null) {
             try {
@@ -61,6 +66,14 @@ class TradingRepository @Inject constructor(
     private fun String.krakenAssetSuffix(): String? =
         uppercase().substringAfter('.', missingDelimiterValue = "").ifEmpty { null }
 
+    private fun getBrokerForPair(config: TradingConfig, pair: String): BrokerApi? {
+        return brokerRegistry.getBrokerForPair(config, pair)
+    }
+
+    private fun isCryptoPair(pair: String): Boolean {
+        val base = pair.substringBefore("/").uppercase()
+        return base in CRYPTO_ASSETS
+    }
 
     // Signals
     fun getAllSignals(): Flow<List<TradingSignal>> = signalDao.getAllSignals()
@@ -95,10 +108,21 @@ class TradingRepository @Inject constructor(
     suspend fun updatePosition(position: Position) = positionDao.updatePosition(position)
 
     // Market data
-    suspend fun getTicker(pair: TradingPair): Result<Ticker> = apiClient.getTicker(pair)
+    suspend fun getTicker(pair: TradingPair): Result<Ticker> {
+        return if (isCryptoPair(pair.symbol)) {
+            krakenApiClient.getTicker(pair)
+        } else {
+            alpacaApiClient.getTicker(pair.base)
+        }
+    }
 
-    suspend fun getOHLC(pair: TradingPair, interval: Int = 60): Result<List<OHLC>> =
-        apiClient.getOHLC(pair, interval)
+    suspend fun getOHLC(pair: TradingPair, interval: Int = 60): Result<List<OHLC>> {
+        return if (isCryptoPair(pair.symbol)) {
+            krakenApiClient.getOHLC(pair, interval)
+        } else {
+            alpacaApiClient.getOHLC(pair.base, interval)
+        }
+    }
 
     suspend fun getMultiTimeframeOHLC(
         pair: TradingPair,
@@ -114,7 +138,7 @@ class TradingRepository @Inject constructor(
             val results = mutableMapOf<Int, List<OHLC>>()
 
             for (timeframe in timeframes) {
-                val result = apiClient.getOHLC(pair, timeframe)
+                val result = getOHLC(pair, timeframe)
                 if (result.isSuccess) {
                     results[timeframe] = result.getOrNull()!!
                 }
@@ -133,9 +157,14 @@ class TradingRepository @Inject constructor(
     // Portfolio
     suspend fun getPortfolio(config: TradingConfig? = null): Portfolio {
         config?.let {
-            apiClient.updateCredentials(
+            krakenApiClient.updateCredentials(
                 apiKey = it.krakenApiKey,
                 apiSecret = it.krakenApiSecret,
+                timeout = it.apiTimeout
+            )
+            alpacaApiClient.updateCredentials(
+                apiKey = it.alpacaApiKey,
+                apiSecret = it.alpacaApiSecret,
                 timeout = it.apiTimeout
             )
         }
@@ -144,10 +173,10 @@ class TradingRepository @Inject constructor(
         val localTotalInvested = positions.sumOf { it.totalInvested }
         val localCurrentValue = positions.sumOf { it.currentValue }
 
-        // Get balances from Kraken
-        val balanceResult = apiClient.getAccountBalance()
-        val balances = balanceResult.getOrNull().orEmpty()
-        val availableFromBalance = balances.entries
+        // Get Kraken balances
+        val krakenBalanceResult = krakenApiClient.getAccountBalance()
+        val krakenBalances = krakenBalanceResult.getOrNull().orEmpty()
+        val availableFromKrakenBalance = krakenBalances.entries
             .filter { (asset, _) ->
                 val normalizedAsset = asset.normalizeKrakenAsset()
                 val suffix = asset.krakenAssetSuffix()
@@ -155,31 +184,42 @@ class TradingRepository @Inject constructor(
             }
             .sumOf { it.value }
 
-        balanceResult.exceptionOrNull()?.let { error ->
+        krakenBalanceResult.exceptionOrNull()?.let { error ->
             Log.w(TAG, "Kraken Balance call failed: ${error.message}")
         }
 
-        val tradeBalanceResult = apiClient.getTradeBalance("ZEUR")
+        val tradeBalanceResult = krakenApiClient.getTradeBalance("ZEUR")
         val tradeBalance = tradeBalanceResult.getOrNull()
         val availableFromTradeBalance = tradeBalance?.mf?.toDoubleOrNull()
             ?: tradeBalance?.tb?.toDoubleOrNull()
 
-        val availableBalance = when {
-            availableFromBalance > 0.0 -> availableFromBalance
+        var availableBalance = when {
+            availableFromKrakenBalance > 0.0 -> availableFromKrakenBalance
             availableFromTradeBalance != null && availableFromTradeBalance > 0.0 -> availableFromTradeBalance
-            else -> availableFromBalance
+            else -> availableFromKrakenBalance
         }
-        val availableBalanceSource = when {
-            availableFromBalance > 0.0 -> "Balance"
-            availableFromTradeBalance != null && availableFromTradeBalance > 0.0 -> "TradeBalance"
+        var availableBalanceSource = when {
+            availableFromKrakenBalance > 0.0 -> "Kraken Balance"
+            availableFromTradeBalance != null && availableFromTradeBalance > 0.0 -> "Kraken TradeBalance"
             else -> "None"
         }
 
         tradeBalanceResult.exceptionOrNull()?.let { error ->
             Log.w(TAG, "Kraken TradeBalance call failed: ${error.message}")
         }
+
+        // Get Alpaca buying power if enabled
+        val alpacaBalanceResult = alpacaApiClient.getAvailableBalance("USD")
+        if (alpacaBalanceResult.isSuccess) {
+            val alpacaBalance = alpacaBalanceResult.getOrNull() ?: 0.0
+            if (alpacaBalance > 0.0) {
+                availableBalance += alpacaBalance
+                availableBalanceSource = if (availableBalanceSource == "None") "Alpaca" else "$availableBalanceSource + Alpaca"
+            }
+        }
+
         if (availableBalance == 0.0) {
-            Log.d(TAG, "Kraken Balance assets=${balances.keys.sorted()} availableFromBalance=$availableFromBalance")
+            Log.d(TAG, "Kraken Balance assets=${krakenBalances.keys.sorted()} availableFromKrakenBalance=$availableFromKrakenBalance")
             Log.d(
                 TAG,
                 "Kraken TradeBalance mf=${tradeBalance?.mf} tb=${tradeBalance?.tb} e=${tradeBalance?.e}"
@@ -215,7 +255,6 @@ class TradingRepository @Inject constructor(
         return try {
             val tradingPair = TradingPair.fromString(pair)
 
-            // Get OHLC data for primary timeframe
             val ohlcResult = getOHLC(tradingPair, config.primaryTimeframe)
             if (ohlcResult.isFailure) {
                 return Result.failure(ohlcResult.exceptionOrNull()!!)
@@ -226,7 +265,6 @@ class TradingRepository @Inject constructor(
                 return Result.failure(Exception("Not enough historical data"))
             }
 
-            // Get current price
             val tickerResult = getTicker(tradingPair)
             if (tickerResult.isFailure) {
                 return Result.failure(tickerResult.exceptionOrNull()!!)
@@ -234,17 +272,14 @@ class TradingRepository @Inject constructor(
 
             val currentPrice = tickerResult.getOrNull()!!.lastTrade
 
-            // Multi-timeframe trend analysis
             val higherTimeframeTrends = if (config.useMultiTimeframe) {
                 fetchHigherTimeframeTrends(tradingPair, config)
             } else {
                 emptyList()
             }
 
-            // Get current positions
             val currentPositions = positionDao.getOpenPositions().first()
 
-            // Generate signal
             val signalResult = strategy.generateSignal(
                 pair = pair,
                 ohlcData = ohlcData,
@@ -268,9 +303,8 @@ class TradingRepository @Inject constructor(
     ): List<Trend> {
         val trends = mutableListOf<Trend>()
 
-        // Fetch secondary timeframe
         try {
-            val secondaryResult = apiClient.getOHLC(pair, config.secondaryTimeframe)
+            val secondaryResult = getOHLC(pair, config.secondaryTimeframe)
             if (secondaryResult.isSuccess) {
                 val data = secondaryResult.getOrNull()!!
                 if (data.size >= 10) {
@@ -282,9 +316,8 @@ class TradingRepository @Inject constructor(
             Log.w(TAG, "Failed to fetch secondary timeframe for ${pair.base}: ${e.message}")
         }
 
-        // Fetch tertiary timeframe
         try {
-            val tertiaryResult = apiClient.getOHLC(pair, config.tertiaryTimeframe)
+            val tertiaryResult = getOHLC(pair, config.tertiaryTimeframe)
             if (tertiaryResult.isSuccess) {
                 val data = tertiaryResult.getOrNull()!!
                 if (data.size >= 10) {
@@ -303,10 +336,10 @@ class TradingRepository @Inject constructor(
         val signals = mutableListOf<TradingSignal>()
         val logEntries = mutableListOf<AnalysisLogEntry>()
 
-        // Fetch available balance from Kraken to use as budget
         val portfolio = getPortfolio(config)
         val availableBalance = portfolio.availableBalance
 
+        // Analyze crypto pairs
         for (pair in config.tradingPairs) {
             try {
                 val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
@@ -354,12 +387,61 @@ class TradingRepository @Inject constructor(
             }
         }
 
+        // Analyze stock pairs if enabled
+        if (config.enableStockTrading && config.alpacaApiKey.isNotBlank()) {
+            for (pair in config.stockTradingPairs) {
+                try {
+                    val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
+                    if (result.isSuccess) {
+                        val signalResult = result.getOrNull()!!
+                        signalResult.signal?.let { signals.add(it) }
+                        val analysis = signalResult.analysis
+                        logEntries.add(
+                            AnalysisLogEntry(
+                                pair = pair,
+                                isSuccess = true,
+                                signalType = signalResult.signal?.type,
+                                strength = signalResult.signal?.strength,
+                                currentPrice = analysis.currentPrice,
+                                rsiValue = analysis.rsi.value,
+                                rsiSignal = analysis.rsi.signal.name,
+                                macdHistogram = analysis.macd.histogram,
+                                macdSignal = analysis.macd.signal.name,
+                                trend = analysis.trend.name,
+                                volumeRatio = analysis.volume.volumeRatio,
+                                candlestickPattern = analysis.candlestickPattern?.name,
+                                availableBalance = availableBalance
+                            )
+                        )
+                    } else {
+                        val error = result.exceptionOrNull()
+                        Log.w(TAG, "Stock analysis failed for $pair: ${error?.message}", error)
+                        logEntries.add(
+                            AnalysisLogEntry(
+                                pair = pair,
+                                isSuccess = false,
+                                errorMessage = error?.message ?: "Unknown error"
+                            )
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Unexpected error analyzing stock $pair: ${e.message}", e)
+                    logEntries.add(
+                        AnalysisLogEntry(
+                            pair = pair,
+                            isSuccess = false,
+                            errorMessage = e.message ?: "Unexpected error"
+                        )
+                    )
+                }
+            }
+        }
+
         val log = AnalysisLog(
             timestamp = System.currentTimeMillis(),
             entries = logEntries
         )
         _lastAnalysisLog.value = log
-        // Persist to SharedPreferences
         try {
             prefs.edit().putString(KEY_LAST_LOG, gson.toJson(log)).apply()
         } catch (e: Exception) {
@@ -369,29 +451,21 @@ class TradingRepository @Inject constructor(
         return signals
     }
 
-    /**
-     * Syncs open positions from Kraken by checking account balances and trade history.
-     * For spot trading, Kraken doesn't track "open positions" - we reconstruct them
-     * from asset balances and recent trades to calculate average entry price.
-     */
     suspend fun syncOpenPositionsFromKraken(config: TradingConfig) {
         try {
-            apiClient.updateCredentials(
+            krakenApiClient.updateCredentials(
                 apiKey = config.krakenApiKey,
                 apiSecret = config.krakenApiSecret,
                 timeout = config.apiTimeout
             )
 
-            // Get account balances to find which assets we hold
-            val balanceResult = apiClient.getAccountBalance()
+            val balanceResult = krakenApiClient.getAccountBalance()
             if (balanceResult.isFailure) {
                 Log.w(TAG, "syncOpenPositions: failed to get balances: ${balanceResult.exceptionOrNull()?.message}")
                 return
             }
             val balances = balanceResult.getOrNull() ?: return
 
-            // Map Kraken asset names to our pair format
-            // e.g. "XXBT" -> "BTC", "XETH" -> "ETH", "SOL" -> "SOL"
             val krakenToBase = mapOf(
                 "XXBT" to "BTC", "XBT" to "BTC",
                 "XETH" to "ETH", "ETH" to "ETH",
@@ -403,13 +477,11 @@ class TradingRepository @Inject constructor(
                 "LTC" to "LTC", "XLTC" to "LTC"
             )
 
-            // Determine which pairs are configured
             val configuredBases = config.tradingPairs.map { pair ->
                 TradingPair.fromString(pair).base
             }.toSet()
 
-            // Find assets we hold that match configured trading pairs
-            val heldAssets = mutableMapOf<String, Double>() // base -> amount
+            val heldAssets = mutableMapOf<String, Double>()
             for ((krakenAsset, amount) in balances) {
                 if (amount <= 0.0) continue
                 val normalized = krakenAsset.normalizeKrakenAsset()
@@ -422,16 +494,13 @@ class TradingRepository @Inject constructor(
                 }
             }
 
-            // Get trades history to calculate average entry prices
-            val tradesResult = apiClient.getTradesHistory()
+            val tradesResult = krakenApiClient.getKrakenTradesHistory()
             val trades = tradesResult.getOrNull() ?: emptyMap()
 
-            // Group buy trades by base asset to compute average entry price
-            val buyTradesByBase = mutableMapOf<String, MutableList<Pair<Double, Double>>>() // base -> list of (price, volume)
+            val buyTradesByBase = mutableMapOf<String, MutableList<Pair<Double, Double>>>()
             for ((_, trade) in trades) {
                 if (trade.type != "buy") continue
                 val tradePair = trade.pair
-                // Resolve base from Kraken pair name
                 val base = resolveBaseFromKrakenPair(tradePair, krakenToBase) ?: continue
                 if (base !in heldAssets) continue
                 val price = trade.price.toDoubleOrNull() ?: continue
@@ -439,16 +508,13 @@ class TradingRepository @Inject constructor(
                 buyTradesByBase.getOrPut(base) { mutableListOf() }.add(price to vol)
             }
 
-            // Now reconcile with local DB
             val localOpenPositions = positionDao.getOpenPositions().first()
-            val localPairSet = localOpenPositions.map { it.pair }.toSet()
 
             for ((base, amount) in heldAssets) {
-                val pairSymbol = "$base/EUR"  // Assuming EUR quote
+                val pairSymbol = "$base/EUR"
                 if (pairSymbol !in config.tradingPairs.map { it.uppercase() } &&
                     pairSymbol !in config.tradingPairs) continue
 
-                // Calculate average entry price from buy trades
                 val buyTrades = buyTradesByBase[base]
                 val avgEntryPrice = if (!buyTrades.isNullOrEmpty()) {
                     val totalCost = buyTrades.sumOf { it.first * it.second }
@@ -458,9 +524,8 @@ class TradingRepository @Inject constructor(
                     0.0
                 }
 
-                // Get current price
                 val currentPrice = try {
-                    val tickerResult = apiClient.getTicker(TradingPair.fromString(pairSymbol))
+                    val tickerResult = krakenApiClient.getTicker(TradingPair.fromString(pairSymbol))
                     tickerResult.getOrNull()?.lastTrade ?: avgEntryPrice
                 } catch (e: Exception) {
                     avgEntryPrice
@@ -471,10 +536,8 @@ class TradingRepository @Inject constructor(
                 val unrealizedPnL = currentValue - totalInvested
                 val unrealizedPnLPercent = if (totalInvested > 0) (unrealizedPnL / totalInvested) * 100 else 0.0
 
-                // Check if we already have this position locally
                 val existingPosition = positionDao.getOpenPositionByPair(pairSymbol)
                 if (existingPosition != null) {
-                    // Update existing position with current data from Kraken
                     positionDao.updatePosition(
                         existingPosition.copy(
                             amount = amount,
@@ -486,7 +549,6 @@ class TradingRepository @Inject constructor(
                         )
                     )
                 } else {
-                    // Create new position from Kraken data
                     positionDao.insertPosition(
                         Position(
                             pair = pairSymbol,
@@ -499,13 +561,13 @@ class TradingRepository @Inject constructor(
                             unrealizedPnLPercent = unrealizedPnLPercent,
                             openedAt = System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis(),
-                            isOpen = true
+                            isOpen = true,
+                            broker = "Kraken"
                         )
                     )
                 }
             }
 
-            // Close local positions that no longer exist on Kraken
             for (localPos in localOpenPositions) {
                 val base = TradingPair.fromString(localPos.pair).base
                 if (base !in heldAssets) {
@@ -526,11 +588,93 @@ class TradingRepository @Inject constructor(
         }
     }
 
+    suspend fun syncOpenPositionsFromAlpaca(config: TradingConfig) {
+        try {
+            alpacaApiClient.updateCredentials(
+                apiKey = config.alpacaApiKey,
+                apiSecret = config.alpacaApiSecret,
+                timeout = config.apiTimeout
+            )
+
+            val positionsResult = alpacaApiClient.getOpenPositions()
+            if (positionsResult.isFailure) {
+                Log.w(TAG, "syncAlpacaPositions: failed to get positions: ${positionsResult.exceptionOrNull()?.message}")
+                return
+            }
+
+            val alpacaPositions = positionsResult.getOrNull().orEmpty()
+            val localOpenPositions = positionDao.getOpenPositions().first()
+
+            for (alpacaPos in alpacaPositions) {
+                val pairSymbol = "${alpacaPos.symbol}/USD"
+                val quantity = alpacaPos.quantity
+                val avgEntryPrice = alpacaPos.avgEntryPrice
+                val currentPrice = alpacaPos.currentPrice
+                val totalInvested = quantity * avgEntryPrice
+                val currentValue = quantity * currentPrice
+                val unrealizedPnL = alpacaPos.unrealizedPnL
+                val unrealizedPnLPercent = alpacaPos.unrealizedPnLPercent
+
+                val existingPosition = positionDao.getOpenPositionByPair(pairSymbol)
+                if (existingPosition != null) {
+                    positionDao.updatePosition(
+                        existingPosition.copy(
+                            amount = quantity,
+                            currentPrice = currentPrice,
+                            currentValue = currentValue,
+                            unrealizedPnL = unrealizedPnL,
+                            unrealizedPnLPercent = unrealizedPnLPercent,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                } else {
+                    positionDao.insertPosition(
+                        Position(
+                            pair = pairSymbol,
+                            amount = quantity,
+                            averageEntryPrice = avgEntryPrice,
+                            currentPrice = currentPrice,
+                            totalInvested = totalInvested,
+                            currentValue = currentValue,
+                            unrealizedPnL = unrealizedPnL,
+                            unrealizedPnLPercent = unrealizedPnLPercent,
+                            openedAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis(),
+                            isOpen = true,
+                            broker = "Alpaca"
+                        )
+                    )
+                }
+            }
+
+            // Close local Alpaca positions that no longer exist
+            for (localPos in localOpenPositions) {
+                if (localPos.broker == "Alpaca") {
+                    val symbol = localPos.pair.substringBefore("/")
+                    val stillExists = alpacaPositions.any { it.symbol == symbol }
+                    if (!stillExists) {
+                        positionDao.updatePosition(
+                            localPos.copy(
+                                isOpen = false,
+                                closedAt = System.currentTimeMillis(),
+                                realizedPnL = localPos.unrealizedPnL,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            }
+
+            Log.d(TAG, "syncAlpacaPositions: synced ${alpacaPositions.size} positions from Alpaca")
+        } catch (e: Exception) {
+            Log.e(TAG, "syncAlpacaPositions failed: ${e.message}", e)
+        }
+    }
+
     private fun resolveBaseFromKrakenPair(
         krakenPair: String,
         krakenToBase: Map<String, String>
     ): String? {
-        // Try to match known patterns like "XXBTZEUR", "SOLEUR", "XETHZEUR"
         val eurSuffixes = listOf("ZEUR", "EUR")
         val usdSuffixes = listOf("ZUSD", "USD")
         val allSuffixes = eurSuffixes + usdSuffixes
@@ -544,9 +688,8 @@ class TradingRepository @Inject constructor(
         return null
     }
 
-    // Cleanup old data
     suspend fun cleanupOldData() {
-        val cutoffTime = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L) // 7 days
+        val cutoffTime = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
         signalDao.deleteOldSignals(cutoffTime)
     }
 }

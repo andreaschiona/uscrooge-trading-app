@@ -1,19 +1,30 @@
 # UScrooge Trading App
 
-An Android application for automated cryptocurrency trading on Kraken, built with Kotlin and Jetpack Compose. UScrooge analyzes market conditions using multi-indicator technical analysis and executes trades autonomously to maximize capital returns.
+An Android application for automated trading across cryptocurrency (Kraken) and stock markets (Alpaca), built with Kotlin and Jetpack Compose. UScrooge analyzes market conditions using multi-indicator technical analysis and executes trades autonomously to maximize capital returns.
 
 ## Features
 
+- **Multi-Broker Support** - Trade crypto on Kraken and stocks on Alpaca from a single dashboard
 - **Automated Trading** - Fully autonomous trade execution based on configurable signal strength thresholds
 - **Multi-Indicator Strategy** - RSI, MACD, Bollinger Bands, ADX, Stochastic RSI, volume analysis, candlestick patterns, support/resistance
 - **Multi-Timeframe Confirmation** - Signals validated against higher timeframe trends (1h, 4h, daily) to reduce false entries
 - **Smart Order Execution** - Limit orders for moderate signals (lower fees), market orders for strong signals (immediate fill)
-- **Real-Time WebSocket Streaming** - Live price updates via Kraken WebSocket v2 API
+- **Real-Time WebSocket Streaming** - Live crypto price updates via Kraken WebSocket v2 API
 - **Circuit Breaker** - Automatic trading halt on max daily drawdown, consecutive failures, or daily trade limit
 - **Active Exit Monitoring** - Stop-loss, take-profit, and trailing stop evaluated every cycle
-- **Exchange-Level Protection** - Stop-loss and take-profit orders placed directly on Kraken as safety net
+- **Exchange-Level Protection** - Stop-loss and take-profit orders placed directly on exchanges as safety net
 - **Configurable Risk Management** - Position sizing, max open positions, slippage guards, and more
 - **Push Notifications** - Real-time alerts for signals, executions, and errors
+- **Broker-Agnostic Dashboard** - Unified view of all positions with visual broker indicators (CRYPTO/STOCK)
+
+## Supported Brokers
+
+| Broker | Market | Assets | Paper Trading |
+|--------|--------|--------|---------------|
+| **Kraken** | Cryptocurrency | BTC, ETH, SOL, XRP, and more | N/A (spot only) |
+| **Alpaca** | US Stocks | AAPL, MSFT, GOOGL, and 50+ more | Yes (paper mode) |
+
+Each broker operates independently. If credentials for a broker are not configured, that market is simply disabled — the app continues to function normally with the configured brokers.
 
 ## Trading Strategy
 
@@ -47,30 +58,34 @@ UScrooge uses a composite scoring system that combines multiple technical indica
 
 ```
 app/src/main/java/com/uscrooge/app/
-├── UScroogeApplication.kt          # Application entry point
+├── USCroogeApplication.kt          # Application entry point
 ├── MainActivity.kt                 # Compose UI entry
 ├── analysis/
 │   └── TechnicalAnalyzer.kt        # All indicator calculations
 ├── data/
 │   ├── api/
-│   │   ├── KrakenApiClient.kt      # REST API client (public + private)
-│   │   ├── KrakenApiService.kt     # Retrofit interface
+│   │   ├── BrokerApi.kt            # Unified broker interface
+│   │   ├── KrakenApiClient.kt      # Kraken REST API client
+│   │   ├── KrakenApiService.kt     # Kraken Retrofit interface
 │   │   ├── KrakenAuthInterceptor.kt # HMAC-SHA512 authentication
-│   │   └── KrakenWebSocketClient.kt # Real-time WebSocket streaming
+│   │   ├── KrakenWebSocketClient.kt # Real-time WebSocket streaming
+│   │   ├── AlpacaApiClient.kt      # Alpaca REST API client
+│   │   ├── AlpacaApiService.kt     # Alpaca Retrofit interface
+│   │   └── AlpacaAuthInterceptor.kt # Header-based authentication
 │   ├── local/
 │   │   ├── TradingDao.kt           # Room DAOs
 │   │   └── TradingDatabase.kt      # Room database
 │   ├── model/                      # Data classes and enums
 │   └── repository/
 │       ├── ConfigRepository.kt     # DataStore preferences
-│       └── TradingRepository.kt    # Market data + signal orchestration
+│       └── TradingRepository.kt    # Multi-broker market data + signal orchestration
 ├── di/
 │   ├── ApiModule.kt                # Hilt DI module
 │   ├── AppModule.kt                # App-wide providers
-│   └── BrokerRegistry.kt          # Config propagation to all components
+│   └── BrokerRegistry.kt          # Multi-broker config propagation
 ├── executor/
 │   ├── CircuitBreaker.kt           # Trading halt logic
-│   └── OrderExecutor.kt           # Order placement + exit monitoring
+│   └── OrderExecutor.kt           # Multi-broker order placement + exit monitoring
 ├── notification/
 │   └── NotificationHelper.kt      # Push notifications
 ├── strategy/
@@ -126,16 +141,26 @@ Requirements: JDK 17, Android SDK with API 34.
 
 After installation, open the app and navigate to **Settings**:
 
-### API Keys (required for trading)
+### Kraken API (Cryptocurrency)
 1. Create API keys on [Kraken](https://www.kraken.com/u/security/api) with permissions: Query Funds, Create & Modify Orders, Cancel/Close Orders, Query Open Orders & Trades
 2. Enter your **API Key** and **API Secret** in the app settings
+3. Leave empty to disable crypto trading
+
+### Alpaca API (Stocks)
+1. Create API keys on [Alpaca](https://app.alpaca.markets/) (paper or live account)
+2. Enable **Stock Trading** toggle in settings
+3. Choose **Paper Trading** mode for testing with simulated money
+4. Enter your **API Key** and **API Secret**
+5. Configure the list of stock symbols to monitor (e.g., `AAPL/USD, MSFT/USD, GOOGL/USD`)
+6. Leave API keys empty to disable stock trading
 
 ### Key Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | Automatic Trading | OFF | Enable autonomous execution |
-| Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Assets to analyze |
+| Crypto Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Crypto assets to analyze |
+| Stock Symbols | AAPL/USD, MSFT/USD, GOOGL/USD | Stock symbols to analyze |
 | Risk Per Trade | 25% | Max percentage of balance per trade |
 | Max Open Positions | 3 | Concurrent position limit |
 | Max Daily Trades | 5 | Daily trade cap |
@@ -149,9 +174,17 @@ After installation, open the app and navigate to **Settings**:
 | Max Daily Drawdown | 5% | Drawdown threshold for halt |
 | Check Interval | 300s | Analysis frequency |
 
+### Dashboard
+
+The dashboard displays all open positions from both brokers in a unified view. Each position card shows a broker badge:
+- **CRYPTO** (orange) — position from Kraken
+- **STOCK** (blue) — position from Alpaca
+
+Portfolio summary aggregates total value, P/L, and available balance across all configured brokers.
+
 ### Risk Warning
 
-This software is provided as-is for educational and personal use. Cryptocurrency trading carries significant risk of capital loss. Past performance does not guarantee future results. Always start with small amounts and monitor the system closely.
+This software is provided as-is for educational and personal use. Trading cryptocurrencies and stocks carries significant risk of capital loss. Past performance does not guarantee future results. Always start with small amounts and monitor the system closely. Use Alpaca's paper trading mode to test strategies without real money.
 
 ## License
 

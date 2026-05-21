@@ -50,6 +50,11 @@ class ConfigRepository(private val context: Context) {
         private val KRAKEN_API_KEY = stringPreferencesKey("kraken_api_key")
         private val KRAKEN_API_SECRET = stringPreferencesKey("kraken_api_secret")
         private val API_TIMEOUT = longPreferencesKey("api_timeout")
+        private val ALPACA_API_KEY = stringPreferencesKey("alpaca_api_key")
+        private val ALPACA_API_SECRET = stringPreferencesKey("alpaca_api_secret")
+        private val ALPACA_PAPER_TRADING = booleanPreferencesKey("alpaca_paper_trading")
+        private val STOCK_TRADING_PAIRS = stringPreferencesKey("stock_trading_pairs")
+        private val ENABLE_STOCK_TRADING = booleanPreferencesKey("enable_stock_trading")
         private val USE_MULTI_TIMEFRAME = booleanPreferencesKey("use_multi_timeframe")
         private val PRIMARY_TIMEFRAME = intPreferencesKey("primary_timeframe")
         private val SECONDARY_TIMEFRAME = intPreferencesKey("secondary_timeframe")
@@ -99,6 +104,13 @@ class ConfigRepository(private val context: Context) {
                 krakenApiKey = decryptApiKey(preferences[KRAKEN_API_KEY] ?: ""),
                 krakenApiSecret = decryptApiSecret(preferences[KRAKEN_API_SECRET] ?: ""),
                 apiTimeout = preferences[API_TIMEOUT] ?: 30000,
+                alpacaApiKey = decryptApiKey(preferences[ALPACA_API_KEY] ?: ""),
+                alpacaApiSecret = decryptApiSecret(preferences[ALPACA_API_SECRET] ?: ""),
+                alpacaPaperTrading = preferences[ALPACA_PAPER_TRADING] ?: true,
+                stockTradingPairs = preferences[STOCK_TRADING_PAIRS]?.split(",")
+                    ?.filter { it.isNotBlank() }
+                    ?: listOf("AAPL/USD", "MSFT/USD", "GOOGL/USD"),
+                enableStockTrading = preferences[ENABLE_STOCK_TRADING] ?: false,
                 useMultiTimeframe = preferences[USE_MULTI_TIMEFRAME] ?: true,
                 primaryTimeframe = preferences[PRIMARY_TIMEFRAME] ?: 60,
                 secondaryTimeframe = preferences[SECONDARY_TIMEFRAME] ?: 240,
@@ -141,6 +153,11 @@ class ConfigRepository(private val context: Context) {
             preferences[KRAKEN_API_KEY] = encryptApiKey(config.krakenApiKey)
             preferences[KRAKEN_API_SECRET] = encryptApiSecret(config.krakenApiSecret)
             preferences[API_TIMEOUT] = config.apiTimeout
+            preferences[ALPACA_API_KEY] = encryptApiKey(config.alpacaApiKey)
+            preferences[ALPACA_API_SECRET] = encryptApiSecret(config.alpacaApiSecret)
+            preferences[ALPACA_PAPER_TRADING] = config.alpacaPaperTrading
+            preferences[STOCK_TRADING_PAIRS] = config.stockTradingPairs.joinToString(",")
+            preferences[ENABLE_STOCK_TRADING] = config.enableStockTrading
             preferences[USE_MULTI_TIMEFRAME] = config.useMultiTimeframe
             preferences[PRIMARY_TIMEFRAME] = config.primaryTimeframe
             preferences[SECONDARY_TIMEFRAME] = config.secondaryTimeframe

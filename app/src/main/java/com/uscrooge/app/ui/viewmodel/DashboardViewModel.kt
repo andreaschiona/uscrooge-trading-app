@@ -32,9 +32,13 @@ class DashboardViewModel @Inject constructor(
             try {
                 _uiState.value = DashboardUiState.Loading
 
-                // Sync positions from Kraken before loading local data
                 val config = configRepository.configFlow.first()
+
+                // Sync positions from both brokers
                 repository.syncOpenPositionsFromKraken(config)
+                if (config.enableStockTrading && config.alpacaApiKey.isNotBlank()) {
+                    repository.syncOpenPositionsFromAlpaca(config)
+                }
 
                 repository.getOpenPositions().collect { positions ->
                     val portfolio = repository.getPortfolio(config)

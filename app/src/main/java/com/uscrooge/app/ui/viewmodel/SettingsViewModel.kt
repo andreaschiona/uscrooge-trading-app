@@ -2,6 +2,7 @@ package com.uscrooge.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
@@ -71,7 +72,9 @@ class SettingsViewModel @Inject constructor(
                 val credentialsChanged = currentConfig == null ||
                     currentConfig.krakenApiKey.trim() != normalizedConfig.krakenApiKey.trim() ||
                     currentConfig.krakenApiSecret.trim() != normalizedConfig.krakenApiSecret.trim() ||
-                    currentConfig.apiTimeout != normalizedConfig.apiTimeout
+                    currentConfig.apiTimeout != normalizedConfig.apiTimeout ||
+                    currentConfig.alpacaApiKey.trim() != normalizedConfig.alpacaApiKey.trim() ||
+                    currentConfig.alpacaApiSecret.trim() != normalizedConfig.alpacaApiSecret.trim()
 
                 if (credentialsChanged) {
                     val credentialsValidation = validateKrakenCredentials(normalizedConfig)
@@ -85,16 +88,27 @@ class SettingsViewModel @Inject constructor(
                         }
 
                         CredentialsValidationStatus.UNVERIFIED -> {
-                            configRepository.updateConfig(normalizedConfig)
-                            _saveState.value = SaveState.Warning(
-                                "Saved (unverified). Kraken check unavailable: ${credentialsValidation.message ?: "try again later"}"
-                            )
-                            kotlinx.coroutines.delay(3000)
-                            _saveState.value = SaveState.Idle
-                            return@launch
                         }
 
                         CredentialsValidationStatus.VALID -> Unit
+                    }
+
+                    // Also validate Alpaca credentials if stock trading is enabled
+                    if (normalizedConfig.enableStockTrading &&
+                        (normalizedConfig.alpacaApiKey.isNotBlank() || normalizedConfig.alpacaApiSecret.isNotBlank())) {
+                        val alpacaValidation = validateAlpacaCredentials(normalizedConfig)
+                        when (alpacaValidation.status) {
+                            CredentialsValidationStatus.INVALID -> {
+                                _saveState.value = SaveState.Error(
+                                    alpacaValidation.message
+                                        ?: "Alpaca credentials validation failed"
+                                )
+                                return@launch
+                            }
+                            CredentialsValidationStatus.UNVERIFIED -> {
+                            }
+                            CredentialsValidationStatus.VALID -> Unit
+                        }
                     }
                 }
 
@@ -121,7 +135,9 @@ class SettingsViewModel @Inject constructor(
 
         return config.copy(
             krakenApiKey = clean(config.krakenApiKey),
-            krakenApiSecret = clean(config.krakenApiSecret)
+            krakenApiSecret = clean(config.krakenApiSecret),
+            alpacaApiKey = clean(config.alpacaApiKey),
+            alpacaApiSecret = clean(config.alpacaApiSecret)
         )
     }
 
@@ -178,6 +194,98 @@ class SettingsViewModel @Inject constructor(
                 status = if (isInvalid) CredentialsValidationStatus.INVALID else CredentialsValidationStatus.UNVERIFIED,
                 message = mapKrakenError(e)
             )
+        }
+    }
+
+    private suspend fun validateAlpacaCredentials(config: TradingConfig): CredentialsValidationResult {
+        val apiKey = config.alpacaApiKey.trim()
+        val apiSecret = config.alpacaApiSecret.trim()
+
+        if (apiKey.isEmpty() && apiSecret.isEmpty()) {
+            return CredentialsValidationResult(CredentialsValidationStatus.VALID)
+        }
+
+        if (apiKey.isEmpty() || apiSecret.isEmpty()) {
+            return CredentialsValidationResult(
+                status = CredentialsValidationStatus.INVALID,
+                message = "Both Alpaca API key and secret are required for stock trading"
+            )
+        }
+
+        return try {
+            val validationClient = AlpacaApiClient(
+                apiKey = apiKey,
+                apiSecret = apiSecret,
+                isPaperTrading = config.alpacaPaperTrading,
+                timeout = config.apiTimeout
+            )
+
+            try {
+                val accountResult = validationClient.getAccountBalance()
+                if (accountResult.isSuccess) {
+                    CredentialsValidationResult(CredentialsValidationStatus.VALID)
+                } else {
+                    val errorMessage = mapAlpacaError(accountResult.exceptionOrNull())
+                    val isInvalid = isInvalidAlpacaCredentialsError(accountResult.exceptionOrNull()?.message)
+                    CredentialsValidationResult(
+                        status = if (isInvalid) CredentialsValidationStatus.INVALID else CredentialsValidationStatus.UNVERIFIED,
+                        message = errorMessage
+                    )
+                }
+            } finally {
+                validationClient.close()
+            }
+        } catch (e: Exception) {
+            val isInvalid = isInvalidAlpacaCredentialsError(e.message)
+            CredentialsValidationResult(
+                status = if (isInvalid) CredentialsValidationStatus.INVALID else CredentialsValidationStatus.UNVERIFIED,
+                message = mapAlpacaError(e)
+            )
+        }
+    }
+
+    private fun isInvalidAlpacaCredentialsError(rawMessage: String?): Boolean {
+        val message = rawMessage?.trim().orEmpty()
+        return message.contains("invalid key", ignoreCase = true) ||
+            message.contains("invalid signature", ignoreCase = true) ||
+            message.contains("unauthorized", ignoreCase = true) ||
+            message.contains("forbidden", ignoreCase = true) ||
+            message.contains("401", ignoreCase = true) ||
+            message.contains("403", ignoreCase = true)
+    }
+
+    private fun mapAlpacaError(throwable: Throwable?): String {
+        val message = throwable?.message?.trim().orEmpty()
+        val errorType = throwable?.javaClass?.simpleName ?: "UnknownError"
+
+        return when (throwable) {
+            is UnknownHostException, is ConnectException ->
+                "Unable to reach Alpaca. Check internet connection and try again."
+
+            is SocketTimeoutException ->
+                "Alpaca verification timed out. Try again or increase API timeout."
+
+            is SSLException ->
+                "Secure connection to Alpaca failed. Check device date/time and network."
+
+            else -> mapAlpacaMessage(message, errorType)
+        }
+    }
+
+    private fun mapAlpacaMessage(message: String, errorType: String): String {
+        return when {
+            message.contains("invalid key", ignoreCase = true) ||
+                message.contains("invalid signature", ignoreCase = true) ->
+                "Alpaca credentials are invalid. Check API key/secret and remove spaces or line breaks."
+
+            message.contains("unauthorized", ignoreCase = true) ||
+                message.contains("forbidden", ignoreCase = true) ->
+                "Alpaca API key is valid but access is denied. Check permissions."
+
+            message.isBlank() ->
+                "Unable to verify Alpaca credentials. Check internet connection. (type: $errorType)"
+
+            else -> "Alpaca credentials validation failed [$errorType]: $message"
         }
     }
 

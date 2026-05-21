@@ -1,12 +1,16 @@
 package com.uscrooge.app.executor
 
 import android.util.Log
+import com.uscrooge.app.data.api.AlpacaApiClient
+import com.uscrooge.app.data.api.BrokerApi
+import com.uscrooge.app.data.api.BrokerOrderInfo
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.api.retryWithBackoff
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
+import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.strategy.ExitSignal
 import com.uscrooge.app.strategy.ExitUrgency
 import com.uscrooge.app.strategy.TradingStrategy
@@ -25,7 +29,9 @@ data class Quadruple<A, B, C, D>(
 
 @Singleton
 class OrderExecutor @Inject constructor(
-    private val apiClient: KrakenApiClient,
+    private val krakenApiClient: KrakenApiClient,
+    private val alpacaApiClient: AlpacaApiClient,
+    private val brokerRegistry: BrokerRegistry,
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
@@ -40,27 +46,27 @@ class OrderExecutor @Inject constructor(
         private const val ORDER_POLL_INTERVAL_MS = 2000L
         private const val ORDER_POLL_TIMEOUT_MS = 30000L
         private const val MAX_FILL_RETRIES = 5
+        private val CRYPTO_ASSETS = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
     }
 
-    /**
-     * Updates the active [TradingConfig] used for slippage limits, fees and
-     * sizing. Called by [com.uscrooge.app.di.BrokerRegistry] whenever the user
-     * changes Settings. Must remain cheap and side-effect free.
-     */
     fun updateConfig(newConfig: TradingConfig) {
         this.config = newConfig
     }
 
-    /**
-     * Checks whether a new trade is allowed by the circuit breaker.
-     * Returns null if allowed, or a reason string if blocked.
-     */
+    private fun getBrokerForPair(pair: String): BrokerApi {
+        val base = pair.substringBefore("/").uppercase()
+        return if (base in CRYPTO_ASSETS) krakenApiClient else alpacaApiClient
+    }
+
+    private fun getBrokerForPosition(position: Position): BrokerApi {
+        return if (position.broker == "Alpaca") alpacaApiClient else krakenApiClient
+    }
+
     suspend fun checkTradingAllowed(): String? {
         return circuitBreaker.checkTradingAllowed(config)
     }
 
     suspend fun executeSignal(signal: TradingSignal): Result<Order> {
-        // Check circuit breaker before execution
         val blocked = circuitBreaker.checkTradingAllowed(config)
         if (blocked != null) {
             signalDao.updateSignal(signal.copy(status = SignalStatus.FAILED))
@@ -68,7 +74,6 @@ class OrderExecutor @Inject constructor(
         }
 
         return try {
-            // Update signal status to executing
             signalDao.updateSignal(signal.copy(status = SignalStatus.EXECUTING))
 
             val result = when (signal.type) {
@@ -92,10 +97,14 @@ class OrderExecutor @Inject constructor(
     }
 
     private suspend fun executeBuyOrder(signal: TradingSignal): Result<Order> {
-        val pair = TradingPair.fromString(signal.pair)
+        val broker = getBrokerForPair(signal.pair)
+        val isAlpaca = broker === alpacaApiClient
 
-        // Get current price to check slippage
-        val tickerResult = apiClient.getTicker(pair)
+        val tickerResult = if (isAlpaca) {
+            broker.getTicker(signal.pair.substringBefore("/"))
+        } else {
+            (broker as KrakenApiClient).getTicker(TradingPair.fromString(signal.pair))
+        }
         if (tickerResult.isFailure) {
             return Result.failure(tickerResult.exceptionOrNull()!!)
         }
@@ -103,45 +112,61 @@ class OrderExecutor @Inject constructor(
         val currentPrice = tickerResult.getOrNull()!!.ask
         val slippage = abs((currentPrice - signal.suggestedPrice) / signal.suggestedPrice) * 100
 
-        // Check slippage
         if (slippage > config.maxSlippagePercent) {
             return Result.failure(Exception("Slippage too high: ${String.format("%.2f", slippage)}%"))
         }
 
-        // Calculate volume in base currency
         val volume = signal.suggestedAmount / currentPrice
 
-        // Determine order type: MARKET for strong/urgent signals, LIMIT for moderate signals
         val useLimit = config.useLimitOrders && signal.strength < config.strongSignalThreshold
         val orderType = if (useLimit) OrderType.LIMIT else OrderType.MARKET
-        val limitPrice = if (useLimit) {
-            // Place limit slightly below current ask for better fill
-            currentPrice * 0.999
-        } else null
+        val limitPrice = if (useLimit) currentPrice * 0.999 else null
 
-        // Validate order
-        val validateResult = apiClient.addOrder(
-            pair = pair,
-            type = OrderSide.BUY,
-            volume = volume,
-            orderType = orderType,
-            price = limitPrice,
-            validate = true
-        )
+        val symbol = if (isAlpaca) signal.pair.substringBefore("/") else signal.pair
+
+        val validateResult = if (isAlpaca) {
+            broker.placeOrder(
+                symbol = symbol,
+                side = OrderSide.BUY,
+                quantity = volume,
+                orderType = orderType,
+                limitPrice = limitPrice,
+                validate = true
+            )
+        } else {
+            (broker as KrakenApiClient).addOrder(
+                pair = TradingPair.fromString(signal.pair),
+                type = OrderSide.BUY,
+                volume = volume,
+                orderType = orderType,
+                price = limitPrice,
+                validate = true
+            )
+        }
 
         if (validateResult.isFailure) {
             return Result.failure(validateResult.exceptionOrNull()!!)
         }
 
-        // Execute order
-        val orderResult = apiClient.addOrder(
-            pair = pair,
-            type = OrderSide.BUY,
-            volume = volume,
-            orderType = orderType,
-            price = limitPrice,
-            validate = false
-        )
+        val orderResult = if (isAlpaca) {
+            broker.placeOrder(
+                symbol = symbol,
+                side = OrderSide.BUY,
+                quantity = volume,
+                orderType = orderType,
+                limitPrice = limitPrice,
+                validate = false
+            )
+        } else {
+            (broker as KrakenApiClient).addOrder(
+                pair = TradingPair.fromString(signal.pair),
+                type = OrderSide.BUY,
+                volume = volume,
+                orderType = orderType,
+                price = limitPrice,
+                validate = false
+            )
+        }
 
         if (orderResult.isFailure) {
             return Result.failure(orderResult.exceptionOrNull()!!)
@@ -149,7 +174,7 @@ class OrderExecutor @Inject constructor(
 
         val orderId = orderResult.getOrNull()!!
 
-        val fillResult = waitForOrderFill(orderId, pair)
+        val fillResult = waitForOrderFill(orderId, signal.pair, broker)
 
         val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
             val fillInfo = fillResult.getOrNull()!!
@@ -163,7 +188,6 @@ class OrderExecutor @Inject constructor(
             Quadruple(limitPrice ?: currentPrice, volume, signal.suggestedAmount * 0.0026, OrderStatus.OPEN)
         }
 
-        // Create order record
         val order = Order(
             orderId = orderId,
             pair = signal.pair,
@@ -181,11 +205,10 @@ class OrderExecutor @Inject constructor(
 
         orderDao.insertOrder(order)
 
-        // Create or update position
         val existingPosition = positionDao.getOpenPositionByPair(signal.pair)
+        val brokerName = if (isAlpaca) "Alpaca" else "Kraken"
 
         if (existingPosition != null) {
-            // Add to existing position
             val newAmount = existingPosition.amount + volume
             val newTotalInvested = existingPosition.totalInvested + signal.suggestedAmount
             val newAveragePrice = newTotalInvested / newAmount
@@ -203,11 +226,8 @@ class OrderExecutor @Inject constructor(
             )
 
             positionDao.updatePosition(updatedPosition)
-
-            // Update exchange stop orders for new position size
-            placeProtectiveOrders(updatedPosition, signal.stopLoss, signal.takeProfit)
+            placeProtectiveOrders(updatedPosition, signal.stopLoss, signal.takeProfit, broker)
         } else {
-            // Create new position
             val position = Position(
                 pair = signal.pair,
                 amount = volume,
@@ -220,17 +240,15 @@ class OrderExecutor @Inject constructor(
                 unrealizedPnLPercent = 0.0,
                 openedAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis(),
-                isOpen = true
+                isOpen = true,
+                broker = brokerName
             )
 
             val positionId = positionDao.insertPosition(position)
             val savedPosition = position.copy(id = positionId)
-
-            // Place stop-loss and take-profit orders on exchange
-            placeProtectiveOrders(savedPosition, signal.stopLoss, signal.takeProfit)
+            placeProtectiveOrders(savedPosition, signal.stopLoss, signal.takeProfit, broker)
         }
 
-        // Update signal
         signalDao.updateSignal(
             signal.copy(
                 status = SignalStatus.EXECUTED,
@@ -243,37 +261,43 @@ class OrderExecutor @Inject constructor(
         return Result.success(order)
     }
 
-    /**
-     * Places stop-loss and take-profit orders on Kraken for the given position.
-     * These act as a safety net independent of the polling cycle.
-     */
-    private suspend fun placeProtectiveOrders(position: Position, stopLossPrice: Double, takeProfitPrice: Double) {
-        val pair = TradingPair.fromString(position.pair)
+    private suspend fun placeProtectiveOrders(position: Position, stopLossPrice: Double, takeProfitPrice: Double, broker: BrokerApi) {
+        val isAlpaca = broker === alpacaApiClient
+        val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
 
-        // Cancel existing protective orders if any
         position.exchangeStopOrderId?.let { orderId ->
-            try { apiClient.cancelOrder(orderId) } catch (_: Exception) {}
+            try { broker.cancelOrder(orderId) } catch (_: Exception) {}
         }
         position.exchangeTakeProfitOrderId?.let { orderId ->
-            try { apiClient.cancelOrder(orderId) } catch (_: Exception) {}
+            try { broker.cancelOrder(orderId) } catch (_: Exception) {}
         }
 
         var stopOrderId: String? = null
         var takeProfitOrderId: String? = null
 
-        // Place stop-loss order
         try {
-            val stopResult = apiClient.addOrder(
-                pair = pair,
-                type = OrderSide.SELL,
-                volume = position.amount,
-                orderType = OrderType.STOP_LOSS,
-                price = stopLossPrice,
-                validate = false
-            )
+            val stopResult = if (isAlpaca) {
+                broker.placeOrder(
+                    symbol = symbol,
+                    side = OrderSide.SELL,
+                    quantity = position.amount,
+                    orderType = OrderType.STOP_LOSS,
+                    stopPrice = stopLossPrice,
+                    validate = false
+                )
+            } else {
+                (broker as KrakenApiClient).addOrder(
+                    pair = TradingPair.fromString(position.pair),
+                    type = OrderSide.SELL,
+                    volume = position.amount,
+                    orderType = OrderType.STOP_LOSS,
+                    price = stopLossPrice,
+                    validate = false
+                )
+            }
             if (stopResult.isSuccess) {
                 stopOrderId = stopResult.getOrNull()
-                Log.i(TAG, "Stop-loss order placed for ${position.pair} at $stopLossPrice: $stopOrderId")
+                Log.i(TAG, "Stop-loss placed for ${position.pair} at $stopLossPrice: $stopOrderId")
             } else {
                 Log.w(TAG, "Failed to place stop-loss for ${position.pair}: ${stopResult.exceptionOrNull()?.message}")
             }
@@ -281,19 +305,29 @@ class OrderExecutor @Inject constructor(
             Log.w(TAG, "Error placing stop-loss for ${position.pair}", e)
         }
 
-        // Place take-profit order
         try {
-            val tpResult = apiClient.addOrder(
-                pair = pair,
-                type = OrderSide.SELL,
-                volume = position.amount,
-                orderType = OrderType.TAKE_PROFIT,
-                price = takeProfitPrice,
-                validate = false
-            )
+            val tpResult = if (isAlpaca) {
+                broker.placeOrder(
+                    symbol = symbol,
+                    side = OrderSide.SELL,
+                    quantity = position.amount,
+                    orderType = OrderType.TAKE_PROFIT,
+                    limitPrice = takeProfitPrice,
+                    validate = false
+                )
+            } else {
+                (broker as KrakenApiClient).addOrder(
+                    pair = TradingPair.fromString(position.pair),
+                    type = OrderSide.SELL,
+                    volume = position.amount,
+                    orderType = OrderType.TAKE_PROFIT,
+                    price = takeProfitPrice,
+                    validate = false
+                )
+            }
             if (tpResult.isSuccess) {
                 takeProfitOrderId = tpResult.getOrNull()
-                Log.i(TAG, "Take-profit order placed for ${position.pair} at $takeProfitPrice: $takeProfitOrderId")
+                Log.i(TAG, "Take-profit placed for ${position.pair} at $takeProfitPrice: $takeProfitOrderId")
             } else {
                 Log.w(TAG, "Failed to place take-profit for ${position.pair}: ${tpResult.exceptionOrNull()?.message}")
             }
@@ -301,7 +335,6 @@ class OrderExecutor @Inject constructor(
             Log.w(TAG, "Error placing take-profit for ${position.pair}", e)
         }
 
-        // Save order IDs to position
         positionDao.updatePosition(
             position.copy(
                 exchangeStopOrderId = stopOrderId ?: position.exchangeStopOrderId,
@@ -311,44 +344,64 @@ class OrderExecutor @Inject constructor(
     }
 
     private suspend fun executeSellOrder(signal: TradingSignal): Result<Order> {
-        val pair = TradingPair.fromString(signal.pair)
+        val broker = getBrokerForPair(signal.pair)
+        val isAlpaca = broker === alpacaApiClient
 
-        // Get existing position
         val position = positionDao.getOpenPositionByPair(signal.pair)
             ?: return Result.failure(Exception("No open position for ${signal.pair}"))
 
-        // Get current price
-        val tickerResult = apiClient.getTicker(pair)
+        val symbol = if (isAlpaca) signal.pair.substringBefore("/") else signal.pair
+                val tickerResult = if (isAlpaca) {
+                    broker.getTicker(symbol)
+                } else {
+                    (broker as KrakenApiClient).getTicker(TradingPair.fromString(position.pair))
+                }
         if (tickerResult.isFailure) {
             return Result.failure(tickerResult.exceptionOrNull()!!)
         }
 
         val currentPrice = tickerResult.getOrNull()!!.bid
-
-        // Sell entire position
         val volume = position.amount
 
-        // Validate order
-        val validateResult = apiClient.addOrder(
-            pair = pair,
-            type = OrderSide.SELL,
-            volume = volume,
-            orderType = OrderType.MARKET,
-            validate = true
-        )
+        val validateResult = if (isAlpaca) {
+            broker.placeOrder(
+                symbol = symbol,
+                side = OrderSide.SELL,
+                quantity = volume,
+                orderType = OrderType.MARKET,
+                validate = true
+            )
+        } else {
+            (broker as KrakenApiClient).addOrder(
+                pair = TradingPair.fromString(signal.pair),
+                type = OrderSide.SELL,
+                volume = volume,
+                orderType = OrderType.MARKET,
+                validate = true
+            )
+        }
 
         if (validateResult.isFailure) {
             return Result.failure(validateResult.exceptionOrNull()!!)
         }
 
-        // Execute order
-        val orderResult = apiClient.addOrder(
-            pair = pair,
-            type = OrderSide.SELL,
-            volume = volume,
-            orderType = OrderType.MARKET,
-            validate = false
-        )
+        val orderResult = if (isAlpaca) {
+            broker.placeOrder(
+                symbol = symbol,
+                side = OrderSide.SELL,
+                quantity = volume,
+                orderType = OrderType.MARKET,
+                validate = false
+            )
+        } else {
+            (broker as KrakenApiClient).addOrder(
+                pair = TradingPair.fromString(signal.pair),
+                type = OrderSide.SELL,
+                volume = volume,
+                orderType = OrderType.MARKET,
+                validate = false
+            )
+        }
 
         if (orderResult.isFailure) {
             return Result.failure(orderResult.exceptionOrNull()!!)
@@ -356,15 +409,14 @@ class OrderExecutor @Inject constructor(
 
         val orderId = orderResult.getOrNull()!!
 
-        // Cancel any outstanding protective orders
         position.exchangeStopOrderId?.let { id ->
-            try { apiClient.cancelOrder(id) } catch (_: Exception) {}
+            try { broker.cancelOrder(id) } catch (_: Exception) {}
         }
         position.exchangeTakeProfitOrderId?.let { id ->
-            try { apiClient.cancelOrder(id) } catch (_: Exception) {}
+            try { broker.cancelOrder(id) } catch (_: Exception) {}
         }
 
-        val fillResult = waitForOrderFill(orderId, pair)
+        val fillResult = waitForOrderFill(orderId, signal.pair, broker)
 
         val fallbackFee = (volume * currentPrice) * 0.0026
         val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
@@ -381,7 +433,6 @@ class OrderExecutor @Inject constructor(
 
         val totalValue = actualVolume * executionPrice
 
-        // Create order record
         val order = Order(
             orderId = orderId,
             pair = signal.pair,
@@ -399,7 +450,6 @@ class OrderExecutor @Inject constructor(
 
         orderDao.insertOrder(order)
 
-        // Close position
         val realizedPnL = totalValue - position.totalInvested - actualFee
         val closedPosition = position.copy(
             currentPrice = executionPrice,
@@ -415,7 +465,6 @@ class OrderExecutor @Inject constructor(
 
         positionDao.updatePosition(closedPosition)
 
-        // Update signal
         signalDao.updateSignal(
             signal.copy(
                 status = SignalStatus.EXECUTED,
@@ -428,37 +477,34 @@ class OrderExecutor @Inject constructor(
         return Result.success(order)
     }
 
-    /**
-     * Monitors all open positions for exit conditions (stop-loss, take-profit, trailing stop).
-     * Should be called each Worker cycle. This is a software-level check in addition to
-     * the exchange-level protective orders (belt and suspenders approach).
-     *
-     * Returns the list of positions that were closed.
-     */
     suspend fun monitorExitConditions(strategy: TradingStrategy): List<Position> {
         val positions = positionDao.getOpenPositions().first()
         val closedPositions = mutableListOf<Position>()
 
         for (position in positions) {
             try {
-                val pair = TradingPair.fromString(position.pair)
-                val tickerResult = apiClient.getTicker(pair)
+                val broker = getBrokerForPosition(position)
+                val isAlpaca = broker === alpacaApiClient
+                val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
+
+                val tickerResult = if (isAlpaca) {
+                    broker.getTicker(symbol)
+                } else {
+                    (broker as KrakenApiClient).getTicker(TradingPair.fromString(position.pair))
+                }
                 if (tickerResult.isFailure) continue
 
                 val currentPrice = tickerResult.getOrNull()!!.lastTrade
 
-                // Update peak price for trailing stop
                 val updatedPosition = position.calculateCurrentValue(currentPrice)
                 positionDao.updatePosition(updatedPosition)
 
-                // Evaluate exit conditions
                 val exitSignal = strategy.evaluateExitConditions(updatedPosition, currentPrice, config)
 
                 if (exitSignal != null) {
                     Log.w(TAG, "Exit condition for ${position.pair}: ${exitSignal.reason}")
 
-                    // Execute market sell immediately
-                    val sellResult = executeExitOrder(updatedPosition, exitSignal)
+                    val sellResult = executeExitOrder(updatedPosition, exitSignal, broker)
                     if (sellResult.isSuccess) {
                         closedPositions.add(updatedPosition)
                     }
@@ -471,21 +517,28 @@ class OrderExecutor @Inject constructor(
         return closedPositions
     }
 
-    /**
-     * Executes an exit (sell) order triggered by exit conditions monitoring.
-     */
-    private suspend fun executeExitOrder(position: Position, exitSignal: ExitSignal): Result<Order> {
-        val pair = TradingPair.fromString(position.pair)
+    private suspend fun executeExitOrder(position: Position, exitSignal: ExitSignal, broker: BrokerApi): Result<Order> {
+        val isAlpaca = broker === alpacaApiClient
+        val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
         val volume = position.amount
 
-        // Execute market sell
-        val orderResult = apiClient.addOrder(
-            pair = pair,
-            type = OrderSide.SELL,
-            volume = volume,
-            orderType = OrderType.MARKET,
-            validate = false
-        )
+        val orderResult = if (isAlpaca) {
+            broker.placeOrder(
+                symbol = symbol,
+                side = OrderSide.SELL,
+                quantity = volume,
+                orderType = OrderType.MARKET,
+                validate = false
+            )
+        } else {
+            (broker as KrakenApiClient).addOrder(
+                pair = TradingPair.fromString(position.pair),
+                type = OrderSide.SELL,
+                volume = volume,
+                orderType = OrderType.MARKET,
+                validate = false
+            )
+        }
 
         if (orderResult.isFailure) {
             circuitBreaker.recordFailure()
@@ -494,15 +547,14 @@ class OrderExecutor @Inject constructor(
 
         val orderId = orderResult.getOrNull()!!
 
-        // Cancel protective orders on exchange
         position.exchangeStopOrderId?.let { id ->
-            try { apiClient.cancelOrder(id) } catch (_: Exception) {}
+            try { broker.cancelOrder(id) } catch (_: Exception) {}
         }
         position.exchangeTakeProfitOrderId?.let { id ->
-            try { apiClient.cancelOrder(id) } catch (_: Exception) {}
+            try { broker.cancelOrder(id) } catch (_: Exception) {}
         }
 
-        val fillResult = waitForOrderFill(orderId, pair)
+        val fillResult = waitForOrderFill(orderId, position.pair, broker)
 
         val fallbackFee = (volume * exitSignal.suggestedPrice) * 0.0026
         val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
@@ -562,14 +614,17 @@ class OrderExecutor @Inject constructor(
 
     suspend fun cancelOrder(orderId: String): Result<Boolean> {
         return try {
-            val result = apiClient.cancelOrder(orderId)
-            if (result.isSuccess) {
-                val order = orderDao.getOrderById(orderId)
-                order?.let {
-                    orderDao.updateOrder(it.copy(status = OrderStatus.CANCELED))
+            val order = orderDao.getOrderById(orderId)
+            if (order != null) {
+                val broker = getBrokerForPair(order.pair)
+                val result = broker.cancelOrder(orderId)
+                if (result.isSuccess) {
+                    orderDao.updateOrder(order.copy(status = OrderStatus.CANCELED))
                 }
+                result
+            } else {
+                Result.failure(Exception("Order not found: $orderId"))
             }
-            result
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -577,7 +632,8 @@ class OrderExecutor @Inject constructor(
 
     suspend fun waitForOrderFill(
         orderId: String,
-        pair: TradingPair,
+        @Suppress("UNUSED_PARAMETER") pair: String,
+        broker: BrokerApi,
         timeoutMs: Long = ORDER_POLL_TIMEOUT_MS,
         pollIntervalMs: Long = ORDER_POLL_INTERVAL_MS
     ): Result<OrderFillInfo> {
@@ -595,7 +651,7 @@ class OrderExecutor @Inject constructor(
                 maxRetries = 2,
                 initialDelayMs = 1000
             ) {
-                apiClient.queryOrder(orderId)
+                broker.getOrder(orderId)
             }
 
             if (orderInfoResult.isFailure) {
@@ -615,9 +671,9 @@ class OrderExecutor @Inject constructor(
 
             when (orderInfo.status.lowercase()) {
                 "closed" -> {
-                    val executedPrice = orderInfo.price.toDoubleOrNull() ?: 0.0
-                    val executedVolume = orderInfo.vol_exec.toDoubleOrNull() ?: 0.0
-                    val fee = orderInfo.fee.toDoubleOrNull() ?: 0.0
+                    val executedPrice = orderInfo.avgFillPrice
+                    val executedVolume = orderInfo.filledQuantity
+                    val fee = orderInfo.fee
 
                     Log.i(TAG, "Order $orderId filled: price=$executedPrice, volume=$executedVolume, fee=$fee")
                     return Result.success(
@@ -659,6 +715,17 @@ class OrderExecutor @Inject constructor(
         return Result.failure(Exception("Order did not fill after $MAX_FILL_RETRIES attempts, last status: $lastStatus"))
     }
 
+    // Overload for backward compatibility with Kraken
+    suspend fun waitForOrderFill(
+        orderId: String,
+        pair: TradingPair,
+        timeoutMs: Long = ORDER_POLL_TIMEOUT_MS,
+        pollIntervalMs: Long = ORDER_POLL_INTERVAL_MS
+    ): Result<OrderFillInfo> {
+        val broker = getBrokerForPair(pair.symbol)
+        return waitForOrderFill(orderId, pair.symbol, broker, timeoutMs, pollIntervalMs)
+    }
+
     data class OrderFillInfo(
         val orderId: String,
         val status: OrderStatus,
@@ -673,8 +740,15 @@ class OrderExecutor @Inject constructor(
 
         positions.forEach { position ->
             try {
-                val pair = TradingPair.fromString(position.pair)
-                val tickerResult = apiClient.getTicker(pair)
+                val broker = getBrokerForPosition(position)
+                val isAlpaca = broker === alpacaApiClient
+                val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
+
+                val tickerResult = if (isAlpaca) {
+                    broker.getTicker(symbol)
+                } else {
+                    (broker as KrakenApiClient).getTicker(TradingPair.fromString(position.pair))
+                }
 
                 if (tickerResult.isSuccess) {
                     val currentPrice = tickerResult.getOrNull()!!.lastTrade

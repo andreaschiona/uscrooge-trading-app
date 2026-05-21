@@ -1,6 +1,8 @@
 package com.uscrooge.app.di
 
 import android.util.Log
+import com.uscrooge.app.data.api.AlpacaApiClient
+import com.uscrooge.app.data.api.BrokerApi
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
@@ -19,43 +21,64 @@ import javax.inject.Singleton
  * Holds the single mutable instances of broker API clients and keeps their
  * credentials/timeout in sync with [ConfigRepository.configFlow].
  *
- * Rationale: previously the [KrakenApiClient] singleton was constructed with
- * empty credentials in [com.uscrooge.app.UScroogeApplication] and never refreshed
- * when the user saved Settings (except as a side effect of opening the Dashboard),
- * which silently broke background workers. This class is the single source of
- * truth: every consumer must inject [BrokerRegistry] (or one of its providers)
- * instead of constructing a client directly.
+ * Supports multiple brokers (Kraken for crypto, Alpaca for stocks).
+ * Each broker operates independently - if credentials are not configured,
+ * that broker is simply disabled.
  */
 @Singleton
 class BrokerRegistry @Inject constructor(
     private val configRepository: ConfigRepository
 ) {
 
-    // Created once with empty credentials and mutated in place via
-    // KrakenApiClient.updateCredentials. Consumers always get the same instance.
     val krakenApiClient: KrakenApiClient = KrakenApiClient(
         apiKey = "",
         apiSecret = "",
         timeout = 30_000L
     )
 
+    val alpacaApiClient: AlpacaApiClient = AlpacaApiClient(
+        apiKey = "",
+        apiSecret = "",
+        isPaperTrading = true,
+        timeout = 30_000L
+    )
+
+    /**
+     * Returns all configured brokers that have valid credentials.
+     */
+    fun getActiveBrokers(config: TradingConfig): List<BrokerApi> {
+        val brokers = mutableListOf<BrokerApi>()
+        if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
+            brokers.add(krakenApiClient)
+        }
+        if (config.enableStockTrading &&
+            config.alpacaApiKey.isNotBlank() &&
+            config.alpacaApiSecret.isNotBlank()) {
+            brokers.add(alpacaApiClient)
+        }
+        return brokers
+    }
+
+    /**
+     * Returns the broker for a given pair/symbol.
+     * Pairs like "BTC/EUR" -> Kraken, symbols like "AAPL/USD" -> Alpaca
+     */
+    fun getBrokerForPair(config: TradingConfig, pair: String): BrokerApi? {
+        val base = pair.substringBefore("/").uppercase()
+        val cryptoAssets = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
+        return if (base in cryptoAssets) {
+            if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) krakenApiClient else null
+        } else {
+            if (config.enableStockTrading &&
+                config.alpacaApiKey.isNotBlank() &&
+                config.alpacaApiSecret.isNotBlank()) alpacaApiClient else null
+        }
+    }
+
     private val applyMutex = Mutex()
     private var strategyRef: TradingStrategy? = null
     private var executorRef: OrderExecutor? = null
 
-    /**
-     * Must be called once from [com.uscrooge.app.UScroogeApplication.onCreate]
-     * with an application-scoped coroutine scope and the strategy/executor
-     * instances obtained from the Hilt graph. Subsequent config changes are
-     * propagated to:
-     *  - [KrakenApiClient] credentials/timeout
-     *  - [TradingStrategy] active config
-     *  - [OrderExecutor] active config
-     *
-     * Strategy/executor are passed as parameters (not injected here) to avoid
-     * a circular dependency: both consume [KrakenApiClient], which is provided
-     * to the Hilt graph by [ApiModule] from this registry.
-     */
     fun start(
         appScope: CoroutineScope,
         tradingStrategy: TradingStrategy,
@@ -67,29 +90,22 @@ class BrokerRegistry @Inject constructor(
             configRepository.configFlow
                 .distinctUntilChanged()
                 .catch { e ->
-                    // ConfigRepository.configFlow only catches IOException; any
-                    // other failure would otherwise kill this collector silently
-                    // for the rest of the process lifetime.
                     Log.e(TAG, "configFlow failed; config propagation stopped", e)
                 }
                 .collect { config -> applyConfig(config) }
         }
     }
 
-    /**
-     * Pushes [config] into the Kraken client, strategy and executor synchronously.
-     * Safe to call from a [androidx.work.CoroutineWorker] on cold start before
-     * the [start] collector has emitted, to avoid sending private API requests
-     * with empty credentials.
-     *
-     * Idempotent and serialized via a mutex so concurrent calls (worker + flow
-     * collector) cannot interleave partial updates.
-     */
     suspend fun applyConfig(config: TradingConfig) {
         applyMutex.withLock {
             krakenApiClient.updateCredentials(
                 apiKey = config.krakenApiKey.trim(),
                 apiSecret = config.krakenApiSecret.trim(),
+                timeout = config.apiTimeout
+            )
+            alpacaApiClient.updateCredentials(
+                apiKey = config.alpacaApiKey.trim(),
+                apiSecret = config.alpacaApiSecret.trim(),
                 timeout = config.apiTimeout
             )
             strategyRef?.updateConfig(config)

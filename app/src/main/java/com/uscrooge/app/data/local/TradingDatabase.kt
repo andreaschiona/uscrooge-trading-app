@@ -45,6 +45,18 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        try {
+            db.execSQL("ALTER TABLE positions ADD COLUMN broker TEXT NOT NULL DEFAULT 'Kraken'")
+            Log.i(TAG, "Migration 3->4 completed: added broker column to positions")
+        } catch (e: Exception) {
+            Log.e(TAG, "Migration 3->4 failed", e)
+            throw e
+        }
+    }
+}
+
 @Database(
     entities = [
         TradingSignal::class,
@@ -52,7 +64,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         Position::class,
         TradeJournalEntry::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {
@@ -73,7 +85,7 @@ abstract class TradingDatabase : RoomDatabase() {
                     TradingDatabase::class.java,
                     "uscrooge_database"
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigrationFrom(1)
                     .build()
                 INSTANCE = instance

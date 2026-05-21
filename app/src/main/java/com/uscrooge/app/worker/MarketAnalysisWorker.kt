@@ -63,6 +63,22 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 Log.e("MarketAnalysisWorker", "Exit monitoring failed: ${e.message}", e)
             }
 
+            // Sync positions from both brokers
+            try {
+                if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
+                    repository.syncOpenPositionsFromKraken(config)
+                }
+            } catch (e: Exception) {
+                Log.w("MarketAnalysisWorker", "Kraken position sync failed: ${e.message}")
+            }
+            try {
+                if (config.enableStockTrading && config.alpacaApiKey.isNotBlank() && config.alpacaApiSecret.isNotBlank()) {
+                    repository.syncOpenPositionsFromAlpaca(config)
+                }
+            } catch (e: Exception) {
+                Log.w("MarketAnalysisWorker", "Alpaca position sync failed: ${e.message}")
+            }
+
             // --- STEP 2: Check circuit breaker before new analysis/trading ---
             val blocked = circuitBreaker.checkTradingAllowed(config)
             if (blocked != null) {

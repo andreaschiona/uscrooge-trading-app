@@ -329,7 +329,7 @@ fun SettingsScreen(
 
                 // API Configuration
                 item {
-                    SettingsSection(title = "Kraken API") {
+                    SettingsSection(title = "Kraken API (Crypto)") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedTextField(
                                 value = currentConfig.krakenApiKey,
@@ -363,9 +363,116 @@ fun SettingsScreen(
                             )
 
                             Text(
-                                text = "⚠️ Keep your API credentials secure. Never share them.",
+                                text = "Leave empty to disable crypto trading.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Alpaca API Configuration
+                item {
+                    SettingsSection(title = "Alpaca API (Stocks)") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Enable Stock Trading",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Trade stocks via Alpaca Markets",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = currentConfig.enableStockTrading,
+                                    onCheckedChange = { checked ->
+                                        editedConfig = currentConfig.copy(enableStockTrading = checked)
+                                    }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Paper Trading",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Use simulated money for testing",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = currentConfig.alpacaPaperTrading,
+                                    onCheckedChange = { checked ->
+                                        editedConfig = currentConfig.copy(alpacaPaperTrading = checked)
+                                    }
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = currentConfig.alpacaApiKey,
+                                onValueChange = { value ->
+                                    editedConfig = currentConfig.copy(alpacaApiKey = value)
+                                },
+                                label = { Text("API Key") },
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Ascii
+                                ),
+                                singleLine = true
+                            )
+
+                            OutlinedTextField(
+                                value = currentConfig.alpacaApiSecret,
+                                onValueChange = { value ->
+                                    editedConfig = currentConfig.copy(alpacaApiSecret = value)
+                                },
+                                label = { Text("API Secret") },
+                                modifier = Modifier.fillMaxWidth(),
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Ascii
+                                ),
+                                singleLine = true
+                            )
+
+                            OutlinedTextField(
+                                value = currentConfig.stockTradingPairs.joinToString(", "),
+                                onValueChange = { value ->
+                                    editedConfig = currentConfig.copy(
+                                        stockTradingPairs = value.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                    )
+                                },
+                                label = { Text("Stock Symbols") },
+                                placeholder = { Text("AAPL/USD, MSFT/USD, GOOGL/USD") },
+                                modifier = Modifier.fillMaxWidth(),
+                                supportingText = { Text("Comma-separated list (symbol/USD)") }
+                            )
+
+                            Text(
+                                text = "Leave API keys empty to disable stock trading.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

@@ -1,6 +1,7 @@
 package com.uscrooge.app.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -253,6 +254,8 @@ fun PositionCard(position: Position) {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BrokerBadge(position.broker)
                 }
 
                 val pnlColor = if (position.unrealizedPnL >= 0) Color(0xFF4CAF50) else Color(0xFFE57373)
@@ -300,6 +303,22 @@ fun PositionCard(position: Position) {
             }
         }
     }
+}
+
+@Composable
+fun BrokerBadge(broker: String) {
+    val (label, color) = when (broker) {
+        "Alpaca" -> "STOCK" to Color(0xFF2196F3)
+        else -> "CRYPTO" to Color(0xFFFF9800)
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        modifier = Modifier
+            .border(0.5.dp, color, RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 1.dp)
+    )
 }
 
 @Composable

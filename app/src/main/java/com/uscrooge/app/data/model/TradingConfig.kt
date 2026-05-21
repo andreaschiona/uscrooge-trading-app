@@ -32,10 +32,17 @@ data class TradingConfig(
     val maxSlippagePercent: Double = 0.5,     // Max 0.5% slippage
     val useLimitOrders: Boolean = true,        // Use limit orders for non-urgent signals
 
-    // API Configuration
+    // API Configuration - Kraken (Crypto)
     val krakenApiKey: String = "",
     val krakenApiSecret: String = "",
     val apiTimeout: Long = 30000,              // 30 seconds
+
+    // API Configuration - Alpaca (Stocks)
+    val alpacaApiKey: String = "",
+    val alpacaApiSecret: String = "",
+    val alpacaPaperTrading: Boolean = true,
+    val stockTradingPairs: List<String> = listOf("AAPL/USD", "MSFT/USD", "GOOGL/USD"),
+    val enableStockTrading: Boolean = false,
 
     // Multi-timeframe analysis
     val useMultiTimeframe: Boolean = true,

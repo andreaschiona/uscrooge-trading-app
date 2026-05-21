@@ -13,7 +13,7 @@ class KrakenApiClient(
     apiSecret: String = "",
     timeout: Long = 30000,
     private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 2.0, maxBurstSize = 5)
-) {
+) : BrokerApi {
     private val baseUrl = "https://api.kraken.com/"
 
     @Volatile
@@ -56,10 +56,10 @@ class KrakenApiClient(
         }
     }
 
-    fun updateCredentials(
+    override fun updateCredentials(
         apiKey: String,
         apiSecret: String,
-        timeout: Long = this.timeout
+        timeout: Long
     ) {
         synchronized(this) {
             val normalizedKey = apiKey.trim()
@@ -90,7 +90,7 @@ class KrakenApiClient(
      * credential validation) to avoid leaking idle threads and sockets until
      * the next GC.
      */
-    fun close() {
+    override fun close() {
         synchronized(this) {
             shutdownCachedOkHttpClient()
             apiServiceCache = null
@@ -306,7 +306,7 @@ class KrakenApiClient(
 
     // Private API methods (require authentication)
 
-    suspend fun getAccountBalance(): Result<Map<String, Double>> {
+    suspend fun getKrakenAccountBalance(): Result<Map<String, Double>> {
         return try {
             val nonce = nextNonce()
             val response = getApiService().getAccountBalance(nonce)
@@ -327,6 +327,10 @@ class KrakenApiClient(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    override suspend fun getAccountBalance(): Result<Map<String, Double>> {
+        return getKrakenAccountBalance()
     }
 
     suspend fun getTradeBalance(asset: String = "ZEUR"): Result<TradeBalance> {
@@ -396,7 +400,7 @@ class KrakenApiClient(
         }
     }
 
-    suspend fun cancelOrder(orderId: String): Result<Boolean> {
+    suspend fun cancelKrakenOrder(orderId: String): Result<Boolean> {
         return try {
             val nonce = nextNonce()
             val response = getApiService().cancelOrder(nonce, orderId)
@@ -416,7 +420,11 @@ class KrakenApiClient(
         }
     }
 
-    suspend fun getOpenPositions(): Result<Map<String, PositionInfo>> {
+    override suspend fun cancelOrder(orderId: String): Result<Boolean> {
+        return cancelKrakenOrder(orderId)
+    }
+
+    suspend fun getKrakenOpenPositions(): Result<Map<String, PositionInfo>> {
         return try {
             val nonce = nextNonce()
             val response = getApiService().getOpenPositions(nonce)
@@ -436,7 +444,7 @@ class KrakenApiClient(
         }
     }
 
-    suspend fun getTradesHistory(start: Long? = null, end: Long? = null): Result<Map<String, TradeInfo>> {
+    suspend fun getKrakenTradesHistory(start: Long? = null, end: Long? = null): Result<Map<String, TradeInfo>> {
         return try {
             val nonce = nextNonce()
             val response = getApiService().getTradesHistory(nonce, start = start, end = end)
@@ -456,7 +464,7 @@ class KrakenApiClient(
         }
     }
 
-    suspend fun getOpenOrders(): Result<Map<String, OrderInfo>> {
+    suspend fun getKrakenOpenOrders(): Result<Map<String, OrderInfo>> {
         return try {
             val nonce = nextNonce()
             val response = getApiService().getOpenOrders(nonce)
@@ -490,6 +498,147 @@ class KrakenApiClient(
                 Result.success(body.result ?: emptyMap())
             } else {
                 Result.failure(Exception("API error: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override val brokerName: String = "Kraken"
+
+    override suspend fun getTicker(symbol: String): Result<Ticker> {
+        return getTicker(TradingPair.fromString(symbol))
+    }
+
+    override suspend fun getOHLC(symbol: String, interval: Int): Result<List<OHLC>> {
+        return getOHLC(TradingPair.fromString(symbol), interval)
+    }
+
+    override suspend fun getAvailableBalance(currency: String): Result<Double> {
+        val balanceResult = getKrakenAccountBalance()
+        return if (balanceResult.isSuccess) {
+            val balances = balanceResult.getOrNull().orEmpty()
+            val available = balances.entries
+                .filter { (asset, _) ->
+                    val normalized = asset.uppercase().substringBefore('.')
+                    val suffix = asset.uppercase().substringAfter('.', missingDelimiterValue = "")
+                    (normalized == currency || normalized == "Z$currency") && suffix != "HOLD"
+                }
+                .sumOf { it.value }
+            Result.success(available)
+        } else {
+            Result.failure(balanceResult.exceptionOrNull()!!)
+        }
+    }
+
+    override suspend fun placeOrder(
+        symbol: String,
+        side: OrderSide,
+        quantity: Double,
+        orderType: OrderType,
+        limitPrice: Double?,
+        stopPrice: Double?,
+        takeProfitPrice: Double?,
+        validate: Boolean
+    ): Result<String> {
+        return addOrder(
+            pair = TradingPair.fromString(symbol),
+            type = side,
+            volume = quantity,
+            orderType = orderType,
+            price = limitPrice ?: stopPrice,
+            validate = validate
+        )
+    }
+
+    override suspend fun getOrder(orderId: String): Result<BrokerOrderInfo> {
+        return try {
+            val orderResult = queryOrder(orderId)
+            if (orderResult.isSuccess) {
+                val orderInfo = orderResult.getOrNull()
+                if (orderInfo != null) {
+                    Result.success(
+                        BrokerOrderInfo(
+                            orderId = orderId,
+                            symbol = orderInfo.descr.pair,
+                            side = orderInfo.descr.type,
+                            type = orderInfo.descr.ordertype,
+                            status = orderInfo.status,
+                            quantity = orderInfo.vol.toDoubleOrNull() ?: 0.0,
+                            filledQuantity = orderInfo.vol_exec.toDoubleOrNull() ?: 0.0,
+                            price = orderInfo.price.toDoubleOrNull() ?: 0.0,
+                            avgFillPrice = orderInfo.price.toDoubleOrNull() ?: 0.0,
+                            fee = orderInfo.fee.toDoubleOrNull() ?: 0.0,
+                            createdAt = (orderInfo.opentm * 1000).toLong(),
+                            executedAt = if (orderInfo.status == "closed") (orderInfo.opentm * 1000).toLong() else null
+                        )
+                    )
+                } else {
+                    Result.failure(Exception("Order not found: $orderId"))
+                }
+            } else {
+                Result.failure(orderResult.exceptionOrNull()!!)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getOpenOrders(): Result<List<BrokerOrderInfo>> {
+        return try {
+            val ordersResult = getKrakenOpenOrders()
+            if (ordersResult.isSuccess) {
+                val orders = ordersResult.getOrNull().orEmpty().map { (id, info) ->
+                    BrokerOrderInfo(
+                        orderId = id,
+                        symbol = info.descr.pair,
+                        side = info.descr.type,
+                        type = info.descr.ordertype,
+                        status = info.status,
+                        quantity = info.vol.toDoubleOrNull() ?: 0.0,
+                        filledQuantity = info.vol_exec.toDoubleOrNull() ?: 0.0,
+                        price = info.price.toDoubleOrNull() ?: 0.0,
+                        avgFillPrice = info.price.toDoubleOrNull() ?: 0.0,
+                        fee = info.fee.toDoubleOrNull() ?: 0.0,
+                        createdAt = (info.opentm * 1000).toLong(),
+                        executedAt = if (info.status == "closed") (info.opentm * 1000).toLong() else null
+                    )
+                }
+                Result.success(orders)
+            } else {
+                Result.failure(ordersResult.exceptionOrNull()!!)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getOpenPositions(): Result<List<BrokerPositionInfo>> {
+        return try {
+            val positionsResult = getKrakenOpenPositions()
+            if (positionsResult.isSuccess) {
+                val positions = positionsResult.getOrNull().orEmpty().map { (_, info) ->
+                    val quantity = info.vol.toDoubleOrNull() ?: 0.0
+                    val cost = info.cost.toDoubleOrNull() ?: 0.0
+                    val avgEntryPrice = if (quantity > 0) cost / quantity else 0.0
+                    val value = info.value?.toDoubleOrNull() ?: cost
+                    val pnl = info.net?.toDoubleOrNull() ?: 0.0
+                    val pnlPercent = if (cost > 0) (pnl / cost) * 100 else 0.0
+
+                    BrokerPositionInfo(
+                        symbol = info.pair,
+                        side = if (info.type == "buy") "long" else "short",
+                        quantity = quantity,
+                        avgEntryPrice = avgEntryPrice,
+                        currentPrice = if (quantity > 0) value / quantity else 0.0,
+                        marketValue = value,
+                        unrealizedPnL = pnl,
+                        unrealizedPnLPercent = pnlPercent
+                    )
+                }
+                Result.success(positions)
+            } else {
+                Result.failure(positionsResult.exceptionOrNull()!!)
             }
         } catch (e: Exception) {
             Result.failure(e)

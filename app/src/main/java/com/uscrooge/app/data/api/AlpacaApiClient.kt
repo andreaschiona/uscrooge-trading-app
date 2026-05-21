@@ -343,37 +343,19 @@ class AlpacaApiClient(
 
             if (response.isSuccessful && response.body() != null) {
                 val jsonString = response.body()!!.string()
-                val gson = Gson()
-                val type = object : TypeToken<Map<String, Any>>() {}.type
-                val jsonMap: Map<String, Any> = gson.fromJson(jsonString, type)
+                Log.d(TAG, "Raw OHLC response for $symbol ($timeframe): ${jsonString.take(300)}")
 
-                @Suppress("UNCHECKED_CAST")
-                val barsList = (jsonMap["bars"] as? Map<String, List<Map<String, Any>>>)?.get(normalizedSymbol)
-                    ?: (jsonMap["bars"] as? Map<String, List<Map<String, Any>>>)?.values?.firstOrNull()
-                    ?: emptyList()
-
-                val ohlcList = barsList.mapNotNull { bar ->
-                    try {
-                        OHLC(
-                            time = (bar["t"] as? String)?.let { Instant.parse(it).toEpochMilli() } ?: 0L,
-                            open = (bar["o"] as? Double) ?: (bar["o"] as? Number)?.toDouble() ?: 0.0,
-                            high = (bar["h"] as? Double) ?: (bar["h"] as? Number)?.toDouble() ?: 0.0,
-                            low = (bar["l"] as? Double) ?: (bar["l"] as? Number)?.toDouble() ?: 0.0,
-                            close = (bar["c"] as? Double) ?: (bar["c"] as? Number)?.toDouble() ?: 0.0,
-                            vwap = (bar["vw"] as? Double) ?: (bar["vw"] as? Number)?.toDouble() ?: 0.0,
-                            volume = (bar["v"] as? Number)?.toDouble() ?: 0.0,
-                            count = (bar["n"] as? Number)?.toInt() ?: 0
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
+                val ohlcList = parseBars(jsonString, normalizedSymbol)
+                Log.d(TAG, "Parsed bars for $symbol: ${ohlcList.size} items")
 
                 if (ohlcList.isEmpty()) {
-                    val msg = "No OHLC data for $symbol (timeframe=$timeframe)"
-                    Log.w(TAG, msg)
-                    Result.failure(Exception(msg))
+                    Log.w(TAG, "No OHLC data for $symbol (timeframe=$timeframe), trying daily fallback")
+                    if (timeframe != "1Day") {
+                        return getOHLCWithTimeframe(symbol, "1Day", now)
+                    }
+                    Result.failure(Exception("No OHLC data for $symbol (timeframe=$timeframe)"))
                 } else {
+                    Log.d(TAG, "Successfully parsed ${ohlcList.size} OHLC bars for $symbol")
                     Result.success(ohlcList)
                 }
             } else {
@@ -384,6 +366,79 @@ class AlpacaApiClient(
         } catch (e: Exception) {
             Log.e(TAG, "getOHLC exception for $symbol: ${e.message}", e)
             Result.failure(Exception("Alpaca OHLC error: ${e.message}"))
+        }
+    }
+
+    private suspend fun getOHLCWithTimeframe(symbol: String, timeframe: String, now: ZonedDateTime): Result<List<OHLC>> {
+        return try {
+            acquireDataRateLimit()
+            val normalizedSymbol = normalizeSymbol(symbol)
+            val startTime = now.minus(180, ChronoUnit.DAYS)
+
+            val response = getDataApiService().getStockBarsRaw(
+                symbol = normalizedSymbol,
+                timeframe = timeframe,
+                start = startTime.format(DateTimeFormatter.ISO_INSTANT),
+                limit = 5000
+            )
+
+            if (response.isSuccessful && response.body() != null) {
+                val jsonString = response.body()!!.string()
+                Log.d(TAG, "Daily fallback response for $symbol: ${jsonString.take(300)}")
+
+                val ohlcList = parseBars(jsonString, normalizedSymbol)
+                Log.d(TAG, "Daily fallback bars for $symbol: ${ohlcList.size} items")
+
+                if (ohlcList.isEmpty()) {
+                    Log.w(TAG, "Daily fallback also empty for $symbol")
+                    Result.failure(Exception("No OHLC data for $symbol (tried $timeframe and 1Day)"))
+                } else {
+                    Log.d(TAG, "Daily fallback successful: ${ohlcList.size} bars for $symbol")
+                    Result.success(ohlcList)
+                }
+            } else {
+                Result.failure(Exception("Daily fallback failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Daily fallback exception for $symbol: ${e.message}")
+            Result.failure(Exception("Daily fallback error: ${e.message}"))
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseBars(jsonString: String, symbol: String): List<OHLC> {
+        val gson = Gson()
+        val jsonElement = gson.fromJson(jsonString, com.google.gson.JsonElement::class.java)
+        val barsElement = jsonElement.asJsonObject["bars"]
+
+        val barsList: List<Map<String, Any>> = when {
+            barsElement.isJsonArray -> {
+                gson.fromJson<List<Map<String, Any>>>(barsElement, object : TypeToken<List<Map<String, Any>>>() {}.type)
+            }
+            barsElement.isJsonObject -> {
+                val barsMap = gson.fromJson<Map<String, List<Map<String, Any>>>>(barsElement, object : TypeToken<Map<String, List<Map<String, Any>>>>() {}.type)
+                barsMap[symbol] ?: barsMap.values.firstOrNull() ?: emptyList()
+            }
+            else -> emptyList()
+        }
+
+        return barsList.mapNotNull { bar ->
+            try {
+                OHLC(
+                    time = (bar["t"] as? String)?.let { Instant.parse(it).toEpochMilli() }
+                        ?: (bar["t"] as? Number)?.toLong() ?: 0L,
+                    open = (bar["o"] as? Double) ?: (bar["o"] as? Number)?.toDouble() ?: 0.0,
+                    high = (bar["h"] as? Double) ?: (bar["h"] as? Number)?.toDouble() ?: 0.0,
+                    low = (bar["l"] as? Double) ?: (bar["l"] as? Number)?.toDouble() ?: 0.0,
+                    close = (bar["c"] as? Double) ?: (bar["c"] as? Number)?.toDouble() ?: 0.0,
+                    vwap = (bar["vw"] as? Double) ?: (bar["vw"] as? Number)?.toDouble() ?: 0.0,
+                    volume = (bar["v"] as? Number)?.toDouble() ?: 0.0,
+                    count = (bar["n"] as? Number)?.toInt() ?: 0
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to parse bar: $bar - ${e.message}")
+                null
+            }
         }
     }
 

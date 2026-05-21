@@ -13,5 +13,13 @@
       "gh *": "allow",
       "*": "ask"
     }
+  },
+  "compaction": {
+    "auto": true,
+    "tail_turns": 10
+  },
+  "tool_output": {
+    "max_lines": 150,
+    "max_bytes": 6144
   }
 }

@@ -24,6 +24,9 @@ class AlpacaApiClient(
 
     override val brokerName: String = "Alpaca"
 
+    // Rate limiter specifically for data API calls (IEX free tier: 200 req/min)
+    private val dataRateLimiter = RateLimiter(permitsPerSecond = 3.0, maxBurstSize = 5)
+
     @Volatile
     private var apiKey: String = apiKey
 
@@ -42,38 +45,41 @@ class AlpacaApiClient(
     @Volatile
     private var okHttpClientCache: OkHttpClient? = null
 
+    // Cached market hours state
+    @Volatile
+    private var marketOpenCache: Boolean? = null
+
+    @Volatile
+    private var marketOpenCacheTime: Long = 0L
+
+    // Cached asset list
+    @Volatile
+    private var cachedAssets: List<String>? = null
+
+    @Volatile
+    private var cachedAssetsTime: Long = 0L
+
+    companion object {
+        private const val TAG = "AlpacaApiClient"
+        private const val MARKET_HOURS_CACHE_MS = 5 * 60 * 1000L
+        private const val ASSETS_CACHE_MS = 60 * 60 * 1000L
+
+        private val POPULAR_STOCKS = listOf(
+            "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "JPM",
+            "V", "JNJ", "WMT", "PG", "MA", "UNH", "HD", "DIS", "BAC", "XOM",
+            "NFLX", "ADBE", "CRM", "PYPL", "INTC", "CMCSA", "PFE", "VZ",
+            "KO", "PEP", "T", "MRK", "ABT", "COST", "AVGO", "TMO", "CVX",
+            "MCD", "DHR", "LLY", "NEE", "BMY", "QCOM", "TXN", "UNP", "PM",
+            "HON", "LOW", "ORCL", "IBM", "AMGN", "SBUX", "BA", "SPY", "QQQ",
+            "IWM", "DIA", "VTI", "VOO"
+        )
+    }
+
     private val tradingBaseUrl: String
         get() = if (isPaperTrading) "https://paper-api.alpaca.markets/" else "https://api.alpaca.markets/"
 
     private val dataBaseUrl: String
         get() = "https://data.alpaca.markets/"
-
-    companion object {
-        private const val TAG = "AlpacaApiClient"
-
-        // Map common stock symbols to a normalized format
-        private val SYMBOL_NORMALIZATION = mapOf(
-            "AAPL" to "AAPL", "MSFT" to "MSFT", "GOOGL" to "GOOGL",
-            "AMZN" to "AMZN", "TSLA" to "TSLA", "META" to "META",
-            "NVDA" to "NVDA", "JPM" to "JPM", "V" to "V",
-            "JNJ" to "JNJ", "WMT" to "WMT", "PG" to "PG",
-            "MA" to "MA", "UNH" to "UNH", "HD" to "HD",
-            "DIS" to "DIS", "BAC" to "BAC", "XOM" to "XOM",
-            "NFLX" to "NFLX", "ADBE" to "ADBE", "CRM" to "CRM",
-            "PYPL" to "PYPL", "INTC" to "INTC", "CMCSA" to "CMCSA",
-            "PFE" to "PFE", "VZ" to "VZ", "KO" to "KO",
-            "PEP" to "PEP", "T" to "T", "MRK" to "MRK",
-            "ABT" to "ABT", "COST" to "COST", "AVGO" to "AVGO",
-            "TMO" to "TMO", "CVX" to "CVX", "MCD" to "MCD",
-            "DHR" to "DHR", "LLY" to "LLY", "NEE" to "NEE",
-            "BMY" to "BMY", "QCOM" to "QCOM", "TXN" to "TXN",
-            "UNP" to "UNP", "PM" to "PM", "HON" to "HON",
-            "LOW" to "LOW", "ORCL" to "ORCL", "IBM" to "IBM",
-            "AMGN" to "AMGN", "SBUX" to "SBUX", "BA" to "BA",
-            "SPY" to "SPY", "QQQ" to "QQQ", "IWM" to "IWM",
-            "DIA" to "DIA", "VTI" to "VTI", "VOO" to "VOO"
-        )
-    }
 
     override fun updateCredentials(
         apiKey: String,
@@ -196,6 +202,66 @@ class AlpacaApiClient(
         }
     }
 
+    // === Market Hours & Asset Discovery ===
+
+    suspend fun isMarketOpen(): Boolean {
+        val now = System.currentTimeMillis()
+        if (marketOpenCache != null && (now - marketOpenCacheTime) < MARKET_HOURS_CACHE_MS) {
+            return marketOpenCache!!
+        }
+
+        return try {
+            val response = getApiService().getClock()
+            if (response.isSuccessful && response.body() != null) {
+                val isOpen = response.body()!!.is_open
+                marketOpenCache = isOpen
+                marketOpenCacheTime = now
+                isOpen
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check market hours: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun getAvailableAssets(): List<String> {
+        val now = System.currentTimeMillis()
+        if (cachedAssets != null && (now - cachedAssetsTime) < ASSETS_CACHE_MS) {
+            return cachedAssets!!
+        }
+
+        return try {
+            val response = getApiService().getAssets(status = "active", assetClass = "us_equity")
+            if (response.isSuccessful && response.body() != null) {
+                val assets = response.body()!!
+                    .filter { it.tradable && it.fractionable }
+                    .map { it.symbol }
+                    .sorted()
+
+                cachedAssets = assets
+                cachedAssetsTime = now
+                Log.d(TAG, "Fetched ${assets.size} tradable assets from Alpaca")
+                assets
+            } else {
+                Log.w(TAG, "Failed to fetch assets, using fallback list")
+                POPULAR_STOCKS
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch assets: ${e.message}, using fallback list")
+            POPULAR_STOCKS
+        }
+    }
+
+    private suspend fun acquireDataRateLimit() {
+        dataRateLimiter.acquire()
+    }
+
+    private fun normalizeSymbol(symbol: String): String {
+        return symbol.substringBefore("/").uppercase()
+    }
+
     // === BrokerApi Implementation ===
 
     private fun extractErrorMessage(response: retrofit2.Response<*>): String {
@@ -212,7 +278,12 @@ class AlpacaApiClient(
     }
 
     override suspend fun getTicker(symbol: String): Result<Ticker> {
+        if (!isMarketOpen()) {
+            return Result.failure(Exception("US stock market is currently closed"))
+        }
+
         return try {
+            acquireDataRateLimit()
             val normalizedSymbol = normalizeSymbol(symbol)
             val response = getDataApiService().getLatestTrade(normalizedSymbol)
 
@@ -252,6 +323,7 @@ class AlpacaApiClient(
 
     override suspend fun getOHLC(symbol: String, interval: Int): Result<List<OHLC>> {
         return try {
+            acquireDataRateLimit()
             val normalizedSymbol = normalizeSymbol(symbol)
             val timeframe = intervalToTimeframe(interval)
             val now = ZonedDateTime.now(java.time.ZoneOffset.UTC)
@@ -506,12 +578,6 @@ class AlpacaApiClient(
     }
 
     // === Helper Methods ===
-
-    private fun normalizeSymbol(symbol: String): String {
-        // Handle formats like "AAPL/USD" -> "AAPL" or just "AAPL"
-        val base = symbol.substringBefore("/")
-        return SYMBOL_NORMALIZATION[base.uppercase()] ?: base.uppercase()
-    }
 
     private fun intervalToTimeframe(intervalMinutes: Int): String {
         return when {

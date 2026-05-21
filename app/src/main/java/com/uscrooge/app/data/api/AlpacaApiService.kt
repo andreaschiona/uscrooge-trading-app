@@ -37,7 +37,12 @@ interface AlpacaApiService {
     @GET("v2/positions/{symbol}")
     suspend fun getPosition(@Path("symbol") symbol: String): Response<AlpacaPosition>
 
-    // Market Data (via data.alpaca.markets - separate base URL)
+    // Assets (dynamic ticker discovery)
+    @GET("v2/assets")
+    suspend fun getAssets(
+        @Query("status") status: String = "active",
+        @Query("asset_class") assetClass: String = "us_equity"
+    ): Response<List<AlpacaAsset>>
     @GET("v2/stocks/{symbol}/bars")
     suspend fun getStockBarsRaw(
         @Path("symbol") symbol: String,
@@ -245,4 +250,23 @@ data class AlpacaCalendarDay(
     val date: String,
     val open: String,
     val close: String
+)
+
+// Asset
+data class AlpacaAsset(
+    val id: String,
+    val asset_class: String,
+    val exchange: String,
+    val symbol: String,
+    val name: String?,
+    val status: String,
+    val tradable: Boolean,
+    val marginable: Boolean,
+    val maintenance_margin_requirement: Int?,
+    val shortable: Boolean,
+    val easy_to_borrow: Boolean?,
+    val fractionable: Boolean,
+    val min_order_size: Double?,
+    val min_trade_increment: Double?,
+    val price_increment: Double?
 )

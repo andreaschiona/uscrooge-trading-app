@@ -392,53 +392,80 @@ class TradingRepository @Inject constructor(
 
         // Analyze stock pairs if enabled
         if (config.enableStockTrading && config.alpacaApiKey.isNotBlank()) {
-            for (pair in config.stockTradingPairs) {
-                try {
-                    val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
-                    if (result.isSuccess) {
-                        val signalResult = result.getOrNull()!!
-                        signalResult.signal?.let { signals.add(it) }
-                        val analysis = signalResult.analysis
-                        logEntries.add(
-                            AnalysisLogEntry(
-                                pair = pair,
-                                isSuccess = true,
-                                signalType = signalResult.signal?.type,
-                                strength = signalResult.signal?.strength,
-                                currentPrice = analysis.currentPrice,
-                                rsiValue = analysis.rsi.value,
-                                rsiSignal = analysis.rsi.signal.name,
-                                macdHistogram = analysis.macd.histogram,
-                                macdSignal = analysis.macd.signal.name,
-                                trend = analysis.trend.name,
-                                volumeRatio = analysis.volume.volumeRatio,
-                                candlestickPattern = analysis.candlestickPattern?.name,
-                                availableBalance = availableBalance,
-                                broker = "Alpaca"
+            val marketOpen = alpacaApiClient.isMarketOpen()
+            if (!marketOpen) {
+                Log.d(TAG, "US stock market is closed, skipping stock analysis")
+                logEntries.add(
+                    AnalysisLogEntry(
+                        pair = "MARKET",
+                        isSuccess = true,
+                        signalType = null,
+                        strength = null,
+                        errorMessage = "US market closed - analysis skipped",
+                        broker = "Alpaca"
+                    )
+                )
+            } else {
+                val dynamicAssets = alpacaApiClient.getAvailableAssets()
+                val configuredBases = config.stockTradingPairs.map { it.substringBefore("/").uppercase() }.toSet()
+
+                val stocksToAnalyze = if (configuredBases.isNotEmpty()) {
+                    configuredBases.filter { it in dynamicAssets }.take(20)
+                } else {
+                    dynamicAssets.take(20)
+                }
+
+                Log.d(TAG, "Analyzing ${stocksToAnalyze.size} stocks: ${stocksToAnalyze.joinToString(", ")}")
+
+                for (symbol in stocksToAnalyze) {
+                    val pair = "$symbol/USD"
+                    try {
+                        val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
+                        if (result.isSuccess) {
+                            val signalResult = result.getOrNull()!!
+                            signalResult.signal?.let { signals.add(it) }
+                            val analysis = signalResult.analysis
+                            logEntries.add(
+                                AnalysisLogEntry(
+                                    pair = pair,
+                                    isSuccess = true,
+                                    signalType = signalResult.signal?.type,
+                                    strength = signalResult.signal?.strength,
+                                    currentPrice = analysis.currentPrice,
+                                    rsiValue = analysis.rsi.value,
+                                    rsiSignal = analysis.rsi.signal.name,
+                                    macdHistogram = analysis.macd.histogram,
+                                    macdSignal = analysis.macd.signal.name,
+                                    trend = analysis.trend.name,
+                                    volumeRatio = analysis.volume.volumeRatio,
+                                    candlestickPattern = analysis.candlestickPattern?.name,
+                                    availableBalance = availableBalance,
+                                    broker = "Alpaca"
+                                )
                             )
-                        )
-                    } else {
-                        val error = result.exceptionOrNull()
-                        Log.w(TAG, "Stock analysis failed for $pair: ${error?.message}", error)
+                        } else {
+                            val error = result.exceptionOrNull()
+                            Log.w(TAG, "Stock analysis failed for $pair: ${error?.message}", error)
+                            logEntries.add(
+                                AnalysisLogEntry(
+                                    pair = pair,
+                                    isSuccess = false,
+                                    errorMessage = error?.message ?: "Unknown error",
+                                    broker = "Alpaca"
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Unexpected error analyzing stock $pair: ${e.message}", e)
                         logEntries.add(
                             AnalysisLogEntry(
                                 pair = pair,
                                 isSuccess = false,
-                                errorMessage = error?.message ?: "Unknown error",
+                                errorMessage = e.message ?: "Unexpected error",
                                 broker = "Alpaca"
                             )
                         )
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Unexpected error analyzing stock $pair: ${e.message}", e)
-                    logEntries.add(
-                        AnalysisLogEntry(
-                            pair = pair,
-                            isSuccess = false,
-                            errorMessage = e.message ?: "Unexpected error",
-                            broker = "Alpaca"
-                        )
-                    )
                 }
             }
         }

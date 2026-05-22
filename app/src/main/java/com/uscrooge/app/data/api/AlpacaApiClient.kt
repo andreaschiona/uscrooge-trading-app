@@ -246,10 +246,11 @@ class AlpacaApiClient(
         }
 
         return try {
-            val response = getApiService().getAssets(status = "active", assetClass = "us_equity", exchange = "NYSE,NASDAQ,ARCA")
+            val response = getApiService().getAssets(status = "active", assetClass = "us_equity")
             if (response.isSuccessful && response.body() != null) {
+                val validExchanges = setOf("NYSE", "NASDAQ", "ARCA")
                 val assets = response.body()!!
-                    .filter { it.tradable && it.fractionable }
+                    .filter { it.tradable && it.fractionable && it.exchange in validExchanges }
                     .map { it.symbol }
                     .sorted()
 

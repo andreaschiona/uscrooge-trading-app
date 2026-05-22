@@ -106,7 +106,8 @@ class BrokerRegistry @Inject constructor(
             alpacaApiClient.updateCredentials(
                 apiKey = config.alpacaApiKey.trim(),
                 apiSecret = config.alpacaApiSecret.trim(),
-                timeout = config.apiTimeout
+                timeout = config.apiTimeout,
+                paperTrading = config.alpacaPaperTrading
             )
             strategyRef?.updateConfig(config)
             executorRef?.updateConfig(config)

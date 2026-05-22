@@ -86,21 +86,34 @@ class AlpacaApiClient(
         apiSecret: String,
         timeout: Long
     ) {
+        updateCredentials(apiKey, apiSecret, timeout, isPaperTrading)
+    }
+
+    fun updateCredentials(
+        apiKey: String,
+        apiSecret: String,
+        timeout: Long,
+        paperTrading: Boolean
+    ) {
         synchronized(this) {
             val normalizedKey = apiKey.trim()
             val normalizedSecret = apiSecret.trim()
             val changed = this.apiKey != normalizedKey ||
                     this.apiSecret != normalizedSecret ||
-                    this.timeout != timeout
+                    this.timeout != timeout ||
+                    this.isPaperTrading != paperTrading
 
             this.apiKey = normalizedKey
             this.apiSecret = normalizedSecret
             this.timeout = timeout
+            this.isPaperTrading = paperTrading
 
             if (changed) {
                 shutdownCachedOkHttpClient()
                 apiServiceCache = null
                 apiServiceCacheKey = ""
+                marketOpenCache = null
+                marketOpenCacheTime = 0L
             }
         }
     }

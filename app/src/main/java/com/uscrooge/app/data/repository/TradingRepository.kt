@@ -209,12 +209,18 @@ class TradingRepository @Inject constructor(
         }
 
         // Get Alpaca buying power if enabled
-        val alpacaBalanceResult = alpacaApiClient.getAvailableBalance("USD")
-        if (alpacaBalanceResult.isSuccess) {
-            val alpacaBalance = alpacaBalanceResult.getOrNull() ?: 0.0
-            if (alpacaBalance > 0.0) {
-                availableBalance += alpacaBalance
-                availableBalanceSource = if (availableBalanceSource == "None") "Alpaca" else "$availableBalanceSource + Alpaca"
+        val alpacaEnabled = config?.enableStockTrading == true && config.alpacaApiKey.isNotBlank()
+        if (alpacaEnabled) {
+            val alpacaBalanceResult = alpacaApiClient.getAvailableBalance("USD")
+            if (alpacaBalanceResult.isSuccess) {
+                val alpacaBalance = alpacaBalanceResult.getOrNull() ?: 0.0
+                Log.d(TAG, "Alpaca available balance: $alpacaBalance USD (paper=${config?.alpacaPaperTrading})")
+                if (alpacaBalance > 0.0) {
+                    availableBalance += alpacaBalance
+                    availableBalanceSource = if (availableBalanceSource == "None") "Alpaca" else "$availableBalanceSource + Alpaca"
+                }
+            } else {
+                Log.w(TAG, "Alpaca balance fetch failed: ${alpacaBalanceResult.exceptionOrNull()?.message}")
             }
         }
 

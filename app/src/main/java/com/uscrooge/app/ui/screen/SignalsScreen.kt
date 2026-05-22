@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -507,8 +509,13 @@ fun AnalysisLogCard(log: AnalysisLog) {
                 Divider()
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
-                    items(log.entries) { entry ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    log.entries.forEach { entry ->
                         AnalysisLogEntryRow(entry)
                         Spacer(modifier = Modifier.height(4.dp))
                     }

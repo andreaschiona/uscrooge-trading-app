@@ -232,14 +232,10 @@ class TradingStrategy @Inject constructor(
         if (higherTimeframeTrends.isNotEmpty()) {
             for (htfTrend in higherTimeframeTrends) {
                 when (htfTrend) {
-                    Trend.STRONG_DOWNTREND, Trend.DOWNTREND -> {
-                        // Higher TF bearish: penalize buy signals
-                        buyScore -= 1.5
-                    }
-                    Trend.STRONG_UPTREND, Trend.UPTREND -> {
-                        // Higher TF bullish: penalize sell signals
-                        sellScore -= 1.5
-                    }
+                    Trend.STRONG_DOWNTREND -> buyScore -= 1.0
+                    Trend.DOWNTREND -> buyScore -= 0.5
+                    Trend.STRONG_UPTREND -> sellScore -= 1.0
+                    Trend.UPTREND -> sellScore -= 0.5
                     Trend.SIDEWAYS -> {}
                 }
             }
@@ -249,8 +245,8 @@ class TradingStrategy @Inject constructor(
         }
 
         return when {
-            buyScore > sellScore && buyScore >= 3.0 -> SignalType.BUY
-            sellScore > buyScore && sellScore >= 3.0 -> SignalType.SELL
+            buyScore > sellScore && buyScore >= 2.5 -> SignalType.BUY
+            sellScore > buyScore && sellScore >= 2.5 -> SignalType.SELL
             else -> SignalType.HOLD
         }
     }

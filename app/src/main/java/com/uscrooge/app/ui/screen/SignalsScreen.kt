@@ -546,7 +546,7 @@ fun AnalysisLogEntryRow(entry: AnalysisLogEntry) {
                     SignalType.BUY -> "BUY ${((entry.strength ?: 0.0) * 100).toInt()}%"
                     SignalType.SELL -> "SELL ${((entry.strength ?: 0.0) * 100).toInt()}%"
                     SignalType.HOLD -> "HOLD"
-                    null -> "No signal"
+                    null -> entry.errorMessage ?: "No signal"
                 }
                 Text(
                     text = info,

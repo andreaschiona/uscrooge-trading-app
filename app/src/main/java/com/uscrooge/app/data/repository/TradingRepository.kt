@@ -226,13 +226,16 @@ class TradingRepository @Inject constructor(
             )
         }
 
-        val krakenTotalInvested = tradeBalance?.c?.toDoubleOrNull()
-        val krakenCurrentValue = tradeBalance?.v?.toDoubleOrNull()
+        // c/v/n from TradeBalance are margin-position fields: always "0" for spot traders.
+        // Use them only when > 0 (margin trading), otherwise fall back to locally-computed values.
+        val krakenTotalInvested = tradeBalance?.c?.toDoubleOrNull()?.takeIf { it > 0.0 }
+        val krakenCurrentValue = tradeBalance?.v?.toDoubleOrNull()?.takeIf { it > 0.0 }
         val krakenTotalPnL = tradeBalance?.n?.toDoubleOrNull()
 
         val totalInvested = krakenTotalInvested ?: localTotalInvested
         val currentValue = krakenCurrentValue ?: localCurrentValue
-        val totalPnL = krakenTotalPnL ?: (currentValue - totalInvested)
+        val totalPnL = if (krakenTotalInvested != null && krakenTotalPnL != null) krakenTotalPnL
+                       else (currentValue - totalInvested)
         val totalPnLPercent = if (totalInvested > 0) (totalPnL / totalInvested) * 100 else 0.0
 
         return Portfolio(

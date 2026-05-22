@@ -6,6 +6,7 @@ An Android application for automated trading across cryptocurrency (Kraken) and 
 
 - **Multi-Broker Support** - Trade crypto on Kraken and stocks on Alpaca from a single dashboard
 - **Automated Trading** - Fully autonomous trade execution based on configurable signal strength thresholds
+- **Dynamic Symbol Discovery** - Crypto pairs fetched live from Kraken's public API; stocks from Alpaca's asset catalogue. User wishlist is always scanned first; remaining slots filled dynamically up to a configurable cap
 - **Multi-Indicator Strategy** - RSI, MACD, Bollinger Bands, ADX, Stochastic RSI, volume analysis, candlestick patterns, support/resistance
 - **Multi-Timeframe Confirmation** - Signals validated against higher timeframe trends (1h, 4h, daily) to reduce false entries
 - **Smart Order Execution** - Limit orders for moderate signals (lower fees), market orders for strong signals (immediate fill)
@@ -19,12 +20,24 @@ An Android application for automated trading across cryptocurrency (Kraken) and 
 
 ## Supported Brokers
 
-| Broker | Market | Assets | Paper Trading |
-|--------|--------|--------|---------------|
-| **Kraken** | Cryptocurrency | BTC, ETH, SOL, XRP, and more | N/A (spot only) |
-| **Alpaca** | US Stocks | AAPL, MSFT, GOOGL, and 50+ more | Yes (paper mode) |
+| Broker     | Market           | Assets                               | Discovery                                      | Paper Trading    |
+|------------|------------------|--------------------------------------|------------------------------------------------|------------------|
+| **Kraken** | Cryptocurrency   | Any EUR pair listed on Kraken        | Dynamic via `/0/public/AssetPairs` (1 h cache) | N/A (spot only)  |
+| **Alpaca** | US Stocks        | All active, fractionable US equities | Dynamic via `/v2/assets` (1 h cache)           | Yes (paper mode) |
 
 Each broker operates independently. If credentials for a broker are not configured, that market is simply disabled — the app continues to function normally with the configured brokers.
+
+### Symbol Discovery Model
+
+For both brokers the scanning list is built as:
+
+```text
+scan_list = union(user_wishlist, dynamic_api_list)
+            sorted: wishlist items first
+            capped at maxCryptoPairsToScan / maxStockPairsToScan
+```
+
+User-configured pairs are always scanned regardless of whether they appear in the live API list (useful for pairs added to Kraken/Alpaca after the cache was populated). The dynamic list fills remaining capacity up to the configured cap. Both lists are cached for 1 hour to avoid excessive API calls.
 
 ## Trading Strategy
 
@@ -159,8 +172,10 @@ After installation, open the app and navigate to **Settings**:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | Automatic Trading | OFF | Enable autonomous execution |
-| Crypto Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Crypto assets to analyze |
-| Stock Symbols | AAPL/USD, MSFT/USD, GOOGL/USD | Stock symbols to analyze |
+| Crypto Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Wishlist — always scanned, plus dynamic Kraken pairs fill remaining slots |
+| Stock Symbols | AAPL/USD, MSFT/USD, GOOGL/USD | Wishlist — always scanned, plus dynamic Alpaca assets fill remaining slots |
+| Max Crypto Pairs to Scan | 15 | Total cap for crypto pairs (wishlist + dynamic) |
+| Max Stock Pairs to Scan | 20 | Total cap for stock symbols (wishlist + dynamic) |
 | Risk Per Trade | 25% | Max percentage of balance per trade |
 | Max Open Positions | 3 | Concurrent position limit |
 | Max Daily Trades | 5 | Daily trade cap |

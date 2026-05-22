@@ -348,8 +348,19 @@ class TradingRepository @Inject constructor(
         val portfolio = getPortfolio(config)
         val availableBalance = portfolio.availableBalance
 
-        // Analyze crypto pairs
-        for (pair in config.tradingPairs) {
+        // Build crypto list: wishlist always included, supplemented by dynamic Kraken pairs
+        val quoteCurrency = config.tradingPairs.firstOrNull()
+            ?.substringAfter("/")?.uppercase() ?: "EUR"
+        val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
+        val wishlistPairs = config.tradingPairs.map { it.uppercase() }.toSet()
+        val cryptoPairsToAnalyze = (wishlistPairs + dynamicKrakenPairs)
+            .toList()
+            // wishlist items first, then dynamic additions
+            .sortedWith(compareByDescending { it in wishlistPairs })
+            .take(config.maxCryptoPairsToScan)
+        Log.d(TAG, "Analyzing ${cryptoPairsToAnalyze.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
+
+        for (pair in cryptoPairsToAnalyze) {
             try {
                 val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
                 if (result.isSuccess) {
@@ -416,15 +427,16 @@ class TradingRepository @Inject constructor(
                 )
             } else {
                 val dynamicAssets = alpacaApiClient.getAvailableAssets()
-                val configuredBases = config.stockTradingPairs.map { it.substringBefore("/").uppercase() }.toSet()
+                val wishlistBases = config.stockTradingPairs
+                    .map { it.substringBefore("/").uppercase() }
+                    .toSet()
+                // Wishlist always included, dynamic list fills remaining slots
+                val stocksToAnalyze = (wishlistBases.toList() + dynamicAssets)
+                    .distinct()
+                    .sortedWith(compareByDescending { it in wishlistBases })
+                    .take(config.maxStockPairsToScan)
 
-                val stocksToAnalyze = if (configuredBases.isNotEmpty()) {
-                    configuredBases.filter { it in dynamicAssets }.take(20)
-                } else {
-                    dynamicAssets.take(20)
-                }
-
-                Log.d(TAG, "Analyzing ${stocksToAnalyze.size} stocks: ${stocksToAnalyze.joinToString(", ")}")
+                Log.d(TAG, "Analyzing ${stocksToAnalyze.size} stocks (${wishlistBases.size} wishlist + dynamic, capped at ${config.maxStockPairsToScan}): ${stocksToAnalyze.joinToString(", ")}")
 
                 for (symbol in stocksToAnalyze) {
                     val pair = "$symbol/USD"

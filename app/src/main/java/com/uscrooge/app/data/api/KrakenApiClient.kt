@@ -34,7 +34,14 @@ class KrakenApiClient(
     @Volatile
     private var okHttpClientCache: OkHttpClient? = null
 
+    @Volatile
+    private var cachedPairs: List<String>? = null
+
+    @Volatile
+    private var cachedPairsTime: Long = 0L
+
     companion object {
+        private const val PAIRS_CACHE_MS = 60 * 60 * 1000L // 1 hour
         // Kraken requires strictly-increasing nonces per API key. Unit is
         // nanoseconds-since-epoch (System.currentTimeMillis() * 1_000_000) which
         // is ~1000x the older "* 1000" microsecond formula. This change is
@@ -174,6 +181,40 @@ class KrakenApiClient(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    suspend fun getAvailablePairs(quoteCurrency: String = "EUR"): List<String> {
+        val now = System.currentTimeMillis()
+        if (cachedPairs != null && (now - cachedPairsTime) < PAIRS_CACHE_MS) {
+            return cachedPairs!!
+        }
+
+        return try {
+            val response = getApiService().getAssetPairs()
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isNotEmpty()) {
+                    return cachedPairs ?: emptyList()
+                }
+                val pairs = body.result?.values
+                    ?.filter { info ->
+                        val wsname = info.wsname ?: return@filter false
+                        wsname.endsWith("/$quoteCurrency")
+                    }
+                    ?.mapNotNull { info -> info.wsname }
+                    ?.sorted()
+                    ?: emptyList()
+
+                cachedPairs = pairs
+                cachedPairsTime = now
+                pairs
+            } else {
+                cachedPairs ?: emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("KrakenApiClient", "Failed to fetch asset pairs: ${e.message}")
+            cachedPairs ?: emptyList()
         }
     }
 

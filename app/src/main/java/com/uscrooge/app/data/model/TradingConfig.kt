@@ -44,6 +44,10 @@ data class TradingConfig(
     val stockTradingPairs: List<String> = listOf("AAPL/USD", "MSFT/USD", "GOOGL/USD"),
     val enableStockTrading: Boolean = false,
 
+    // Dynamic symbol discovery limits
+    val maxCryptoPairsToScan: Int = 15,          // Max crypto pairs scanned (wishlist + dynamic)
+    val maxStockPairsToScan: Int = 20,           // Max stock pairs scanned (wishlist + dynamic)
+
     // Multi-timeframe analysis
     val useMultiTimeframe: Boolean = true,
     val primaryTimeframe: Int = 60,            // 1 hour

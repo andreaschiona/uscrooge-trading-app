@@ -246,7 +246,7 @@ class AlpacaApiClient(
         }
 
         return try {
-            val response = getApiService().getAssets(status = "active", assetClass = "us_equity")
+            val response = getApiService().getAssets(status = "active", assetClass = "us_equity", exchange = "NYSE,NASDAQ,ARCA")
             if (response.isSuccessful && response.body() != null) {
                 val assets = response.body()!!
                     .filter { it.tradable && it.fractionable }

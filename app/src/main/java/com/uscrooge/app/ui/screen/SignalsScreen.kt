@@ -507,9 +507,11 @@ fun AnalysisLogCard(log: AnalysisLog) {
                 Divider()
                 Spacer(modifier = Modifier.height(8.dp))
 
-                log.entries.forEach { entry ->
-                    AnalysisLogEntryRow(entry)
-                    Spacer(modifier = Modifier.height(4.dp))
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                    items(log.entries) { entry ->
+                        AnalysisLogEntryRow(entry)
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
                 }
             }
         }

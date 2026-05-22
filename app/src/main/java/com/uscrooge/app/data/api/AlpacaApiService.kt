@@ -41,7 +41,8 @@ interface AlpacaApiService {
     @GET("v2/assets")
     suspend fun getAssets(
         @Query("status") status: String = "active",
-        @Query("asset_class") assetClass: String = "us_equity"
+        @Query("asset_class") assetClass: String = "us_equity",
+        @Query("exchange") exchange: String? = null
     ): Response<List<AlpacaAsset>>
     @GET("v2/stocks/{symbol}/bars")
     suspend fun getStockBarsRaw(

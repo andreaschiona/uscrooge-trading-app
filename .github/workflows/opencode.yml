@@ -6,7 +6,6 @@ on:
   pull_request_review_comment:
     types: [created]
 
-# Soluzione: differenzia il gruppo includendo il nome del trigger dell'evento
 concurrency:
   group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.pull_request.pull_request.number }}
   cancel-in-progress: true
@@ -23,18 +22,18 @@ jobs:
         startsWith(github.event.comment.body, '/opencode')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 120 # Previene i freeze indefiniti dei modelli free di DeepSeek
+    timeout-minutes: 30
     permissions:
       id-token: write
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Cache opencode
         uses: actions/cache@v4
@@ -42,7 +41,7 @@ jobs:
           path: |
             ~/.opencode
             ~/.opencode/bin
-          key: opencode-${{ runner.os }}-${{ runner.arch }}-v1.15.7 # Aggiornato alla versione del tuo log
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-v1.15.10
           restore-keys: |
             opencode-${{ runner.os }}-${{ runner.arch }}-
 
@@ -52,4 +51,5 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_TELEMETRY: false
         with:
-          model: opencode/deepseek-v4-flash-free
+          model: opencode/glm-4.7
+          share: false

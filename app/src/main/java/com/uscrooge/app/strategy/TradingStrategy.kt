@@ -461,10 +461,12 @@ class TradingStrategy @Inject constructor(
             )
         }
 
-        // Check trailing stop
+        // Check trailing stop — only triggers when current profit exceeds the trailing
+        // distance (e.g. 1.5 %), ensuring a meaningful gain is locked in and
+        // preventing premature exit from tiny price fluctuations.
         val peakPrice = maxOf(position.peakPrice, position.currentPrice)
         val trailingStopPrice = peakPrice * (1 - config.trailingStopPercent / 100)
-        if (currentPrice < trailingStopPrice && currentPnLPercent > 0) {
+        if (currentPrice < trailingStopPrice && currentPnLPercent > config.trailingStopPercent) {
             return ExitSignal(
                 reason = "Trailing stop triggered",
                 urgency = ExitUrgency.IMMEDIATE,

@@ -622,15 +622,22 @@ class TradingRepository @Inject constructor(
                 }
             }
 
+            val now = System.currentTimeMillis()
+            val minAgeToClose = config.checkIntervalSeconds * 1000L
+
             for (localPos in localOpenPositions) {
                 val base = TradingPair.fromString(localPos.pair).base
                 if (base !in heldAssets) {
+                    // Do not close freshly opened positions whose buy order
+                    // may not have settled on the exchange yet.
+                    if (now - localPos.openedAt < minAgeToClose) continue
+
                     positionDao.updatePosition(
                         localPos.copy(
                             isOpen = false,
-                            closedAt = System.currentTimeMillis(),
+                            closedAt = now,
                             realizedPnL = localPos.unrealizedPnL,
-                            updatedAt = System.currentTimeMillis()
+                            updatedAt = now
                         )
                     )
                 }
@@ -702,17 +709,24 @@ class TradingRepository @Inject constructor(
             }
 
             // Close local Alpaca positions that no longer exist
+            val now = System.currentTimeMillis()
+            val minAgeToClose = config.checkIntervalSeconds * 1000L
+
             for (localPos in localOpenPositions) {
                 if (localPos.broker == "Alpaca") {
+                    // Do not close freshly opened positions whose buy order
+                    // may not have settled on the exchange yet.
+                    if (now - localPos.openedAt < minAgeToClose) continue
+
                     val symbol = localPos.pair.substringBefore("/")
                     val stillExists = alpacaPositions.any { it.symbol == symbol }
                     if (!stillExists) {
                         positionDao.updatePosition(
                             localPos.copy(
                                 isOpen = false,
-                                closedAt = System.currentTimeMillis(),
+                                closedAt = now,
                                 realizedPnL = localPos.unrealizedPnL,
-                                updatedAt = System.currentTimeMillis()
+                                updatedAt = now
                             )
                         )
                     }

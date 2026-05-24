@@ -36,17 +36,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Cache opencode
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.opencode
-            ~/.opencode/bin
-          # Cambiata la chiave per invalidare la cache corrotta precedente
-          key: opencode-${{ runner.os }}-${{ runner.arch }}-v2-free
-          restore-keys: |
-            opencode-${{ runner.os }}-${{ runner.arch }}-
-
       - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:

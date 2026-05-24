@@ -7,12 +7,14 @@ on:
     types: [created]
 
 concurrency:
-  group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.pull_request.pull_request.number }}
+  group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.reply_to_id }}
   cancel-in-progress: true
 
 jobs:
   opencode:
+    # Verifichiamo in modo sicuro la presenza del commento e l'autore
     if: |
+      github.event.comment != null &&
       github.event.comment.author_association == 'OWNER' &&
       github.actor == 'andreaschiona' &&
       (

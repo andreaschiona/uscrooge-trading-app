@@ -42,7 +42,8 @@ jobs:
           path: |
             ~/.opencode
             ~/.opencode/bin
-          key: opencode-${{ runner.os }}-${{ runner.arch }}-v1.15.10
+          # Cambiata la chiave per invalidare la cache corrotta precedente
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-v2-free
           restore-keys: |
             opencode-${{ runner.os }}-${{ runner.arch }}-
 
@@ -52,7 +53,6 @@ jobs:
           OPENCODE_TELEMETRY: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Modello free alternativo per evitare il sovraccarico del server Kimi
           model: opencode/internlm-2.5-free
           share: false
           use_github_token: true

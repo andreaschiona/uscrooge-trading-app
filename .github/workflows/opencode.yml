@@ -50,8 +50,9 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_TELEMETRY: false
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Inietta il token d'accesso nel runner
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: opencode/kimi-k2.5-free
+          # Modello free alternativo per evitare il sovraccarico del server Kimi
+          model: opencode/internlm-2.5-free
           share: false
-          use_github_token: true # Forza l'azione ad usare il token inserito sopra anziché l'App GitHub
+          use_github_token: true

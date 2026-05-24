@@ -51,5 +51,5 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENCODE_TELEMETRY: false
         with:
-          model: opencode/glm-4.7
+          model: opencode/kimi-k2.5-free
           share: false

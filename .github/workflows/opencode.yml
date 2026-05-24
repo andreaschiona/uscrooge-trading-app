@@ -7,13 +7,11 @@ on:
     types: [created]
 
 concurrency:
-  # Gestione robusta della concorrenza per evitare fallimenti immediati su Issue e PR
   group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.reply_to_id }}
   cancel-in-progress: true
 
 jobs:
   opencode:
-    # Verifica sicura dei permessi dell'autore e del comando inserito nel commento
     if: |
       github.event.comment != null &&
       github.event.comment.author_association == 'OWNER' &&
@@ -52,7 +50,8 @@ jobs:
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_TELEMETRY: false
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Necessario per l'autenticazione dei modelli free
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Inietta il token d'accesso nel runner
         with:
-          model: opencode/kimi-k2.5-free # Modello gratuito stabile e supportato
+          model: opencode/kimi-k2.5-free
           share: false
+          use_github_token: true # Forza l'azione ad usare il token inserito sopra anziché l'App GitHub

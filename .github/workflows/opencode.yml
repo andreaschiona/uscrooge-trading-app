@@ -59,11 +59,26 @@ jobs:
         shell: bash
         run: echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
+      - name: Determine model from comment
+        id: model_select
+        shell: bash
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          if echo "$COMMENT" | grep -qi "GEMINI"; then
+            echo "model=gemini/gemini-2.5-flash" >> "$GITHUB_OUTPUT"
+          elif echo "$COMMENT" | grep -qi "BIGPICKLE"; then
+            echo "model=opencode/big-pickle" >> "$GITHUB_OUTPUT"
+          elif echo "$COMMENT" | grep -qi "NEMOTRON"; then
+            echo "model=opencode/nemotron-3-super-free" >> "$GITHUB_OUTPUT"
+          else
+            echo "model=opencode/deepseek-v4-flash-free" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run opencode (with retry)
         shell: bash
         id: run_opencode
         env:
-          MODEL: opencode/deepseek-v4-flash-free
+          MODEL: ${{ steps.model_select.outputs.model }}
           AGENT: ""
           SHARE: false
           PROMPT: ""
@@ -73,6 +88,7 @@ jobs:
           OIDC_BASE_URL: ""
           OPENCODE_TELEMETRY: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           MAX_RETRIES=3
           RETRY_DELAY=15

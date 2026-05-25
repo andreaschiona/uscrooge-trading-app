@@ -33,6 +33,15 @@
 - **Release workflow** (`.github/workflows/release.yml`): on push to `main`, runs tests, bumps patch version, builds signed release APK, creates GitHub Release with APK attached.
 - **OpenCode workflow** (`.github/workflows/opencode.yml`): responds to issue/PR comments via opencode agent.
 
+## OpenCode workflow resilience
+- `opencode.json`: provider timeout (`timeout: 120000ms`, `chunkTimeout: 30000ms`) prevents indefinite blocking on LLM calls
+- `opencode.yml`:
+  - `timeout-minutes: 60`: overall job timeout
+  - `variant: minimal`: reduces reasoning effort for faster replies
+  - Bash retry loop (3 attempts, 15s delay) around `opencode github run`
+  - Action steps replicated inline (version fetch, cache, install, PATH) from composite action for full retry control
+- **Alternative**: set `GEMINI_API_KEY` secret and change model to `gemini/gemini-2.5-flash` for a more reliable free model
+
 ## High-impact implementation gotchas
 - `OrderExecutor.updatePositionPrices()` uses `positionDao.getOpenPositions().first()` (single snapshot). This is safe in Worker context.
 - Room uses destructive migration: any schema change (adding columns to entities) wipes DB. Use proper migrations for production data preservation.

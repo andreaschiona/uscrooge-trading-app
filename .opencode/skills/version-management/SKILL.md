@@ -1,4 +1,9 @@
-# Skill: Version Management
+---
+name: version-management
+description: "Use when modifying code, creating branches, writing commits, or preparing pull requests. Enforces the mandatory workflow: GitHub Issue -> feature branch -> conventional commits -> pull request. The commit message type determines the next MAJOR/MINOR/PATCH version bump. Use ONLY when the task involves code changes; not needed for pure questions or documentation."
+---
+
+# Version Management
 
 Regole per gestire il versionamento semantico del progetto tramite conventional commit.
 

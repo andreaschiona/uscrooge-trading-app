@@ -90,18 +90,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          echo "Selected model: $MODEL"
           MAX_RETRIES=3
           RETRY_DELAY=15
           for i in $(seq 1 $MAX_RETRIES); do
             echo "opencode run attempt $i of $MAX_RETRIES"
-            if opencode github run; then
+            set +e
+            opencode github run
+            exit_code=$?
+            set -e
+            echo "opencode exit code: $exit_code"
+            if [ $exit_code -eq 0 ]; then
               echo "opencode completed successfully"
               exit 0
             fi
-            exit_code=$?
             if [ $i -eq $MAX_RETRIES ]; then
               echo "All $MAX_RETRIES attempts failed, last exit code: $exit_code"
-              exit $exit_code
+              exit 1
             fi
             echo "Attempt $i failed (exit code: $exit_code), retrying in ${RETRY_DELAY}s..."
             sleep $RETRY_DELAY

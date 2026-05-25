@@ -8,7 +8,9 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.time.DayOfWeek
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -158,7 +160,7 @@ class AlpacaApiClient(
                 .writeTimeout(timeout, TimeUnit.MILLISECONDS)
                 .addInterceptor(RateLimitInterceptor(rateLimiter))
                 .addInterceptor(HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
+                    level = HttpLoggingInterceptor.Level.HEADERS
                 })
                 .apply {
                     if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
@@ -190,13 +192,17 @@ class AlpacaApiClient(
         }
 
         synchronized(this) {
+            if (apiServiceCache != null && apiServiceCacheKey == cacheKey) {
+                return apiServiceCache!!
+            }
+
             val okHttpClient = OkHttpClient.Builder()
                 .connectTimeout(timeout, TimeUnit.MILLISECONDS)
                 .readTimeout(timeout, TimeUnit.MILLISECONDS)
                 .writeTimeout(timeout, TimeUnit.MILLISECONDS)
                 .addInterceptor(RateLimitInterceptor(rateLimiter))
                 .addInterceptor(HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
+                    level = HttpLoggingInterceptor.Level.HEADERS
                 })
                 .apply {
                     if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
@@ -211,7 +217,10 @@ class AlpacaApiClient(
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
 
-            return retrofit.create(AlpacaApiService::class.java)
+            val service = retrofit.create(AlpacaApiService::class.java)
+            apiServiceCache = service
+            apiServiceCacheKey = cacheKey
+            return service
         }
     }
 
@@ -231,12 +240,29 @@ class AlpacaApiClient(
                 marketOpenCacheTime = now
                 isOpen
             } else {
-                false
+                Log.w(TAG, "Market hours API returned ${response.code()}, falling back to local time")
+                val localIsOpen = isMarketOpenByLocalTime()
+                marketOpenCache = localIsOpen
+                marketOpenCacheTime = now
+                localIsOpen
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to check market hours: ${e.message}")
-            false
+            Log.w(TAG, "Failed to check market hours: ${e.message}, falling back to local time")
+            val localIsOpen = isMarketOpenByLocalTime()
+            marketOpenCache = localIsOpen
+            marketOpenCacheTime = now
+            localIsOpen
         }
+    }
+
+    private fun isMarketOpenByLocalTime(): Boolean {
+        val now = ZonedDateTime.now(ZoneId.of("America/New_York"))
+        if (now.dayOfWeek == DayOfWeek.SATURDAY || now.dayOfWeek == DayOfWeek.SUNDAY) {
+            return false
+        }
+        val openTime = now.withHour(9).withMinute(30)
+        val closeTime = now.withHour(16).withMinute(0)
+        return !now.isBefore(openTime) && now.isBefore(closeTime)
     }
 
     suspend fun getAvailableAssets(): List<String> {

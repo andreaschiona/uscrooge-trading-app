@@ -48,10 +48,8 @@ data class MACD(
 ) {
     val signal: Signal
         get() = when {
-            histogram > 0 && macdLine > signalLine -> Signal.BULLISH_CROSSOVER
-            histogram < 0 && macdLine < signalLine -> Signal.BEARISH_CROSSOVER
-            histogram > 0 -> Signal.BULLISH
-            histogram < 0 -> Signal.BEARISH
+            histogram > 0.0 -> Signal.BULLISH
+            histogram < 0.0 -> Signal.BEARISH
             else -> Signal.NEUTRAL
         }
 

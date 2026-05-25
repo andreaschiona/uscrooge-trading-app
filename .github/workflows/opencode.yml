@@ -65,7 +65,7 @@ jobs:
         run: |
           COMMENT="${{ github.event.comment.body }}"
           if echo "$COMMENT" | grep -qi "GEMINI"; then
-            echo "model=google/gemini-2.5-flash" >> "$GITHUB_OUTPUT"
+            echo "model=gemini/gemini-2.5-flash" >> "$GITHUB_OUTPUT"
           elif echo "$COMMENT" | grep -qi "BIGPICKLE"; then
             echo "model=opencode/big-pickle" >> "$GITHUB_OUTPUT"
           elif echo "$COMMENT" | grep -qi "NEMOTRON"; then
@@ -79,18 +79,20 @@ jobs:
         id: run_opencode
         env:
           MODEL: ${{ steps.model_select.outputs.model }}
-          AGENT: ""
-          SHARE: false
-          PROMPT: ""
-          USE_GITHUB_TOKEN: true
-          MENTIONS: /opencode,/oc
-          VARIANT: minimal
-          OIDC_BASE_URL: ""
           OPENCODE_TELEMETRY: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           echo "Selected model: $MODEL"
+
+          # Inject model into opencode.json (opencode github run reads model from config)
+          if command -v jq &> /dev/null; then
+            jq --arg model "$MODEL" '.model = $model' opencode.json > opencode.tmp.json && mv opencode.tmp.json opencode.json
+            echo "Injected model '$MODEL' into opencode.json"
+          else
+            echo "Warning: jq not available, skipping model injection"
+          fi
+
           MAX_RETRIES=3
           RETRY_DELAY=15
           for i in $(seq 1 $MAX_RETRIES); do

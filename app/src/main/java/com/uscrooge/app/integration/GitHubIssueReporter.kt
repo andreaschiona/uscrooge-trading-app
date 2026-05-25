@@ -64,14 +64,23 @@ class GitHubIssueReporter(
 
     private val repo: String get() = BuildConfig.GITHUB_REPO
 
-    fun isConfigured(): Boolean = getToken().isNotBlank() && repo.isNotBlank() && repo != "unknown/repo"
+    fun isConfigured(): Boolean {
+        val hasToken = getToken().isNotBlank()
+        val hasRepo = repo.isNotBlank() && repo != "unknown/repo"
+        if (!hasToken) Log.w(TAG, "GitHub token not available (set REPORTING_GH_TOKEN secret and build in CI)")
+        if (!hasRepo) Log.w(TAG, "GitHub repo not set (GITHUB_REPOSITORY env missing)")
+        return hasToken && hasRepo
+    }
 
     suspend fun reportError(
         title: String,
         body: String,
         labels: List<String> = listOf("bug", "auto-reported")
     ): Result<Int> {
-        if (!isConfigured()) return Result.failure(IllegalStateException("GitHub not configured"))
+        if (!isConfigured()) {
+            Log.e(TAG, "Cannot report error to GitHub: reporter not configured")
+            return Result.failure(IllegalStateException("GitHub not configured"))
+        }
 
         val token = getToken()
         val currentRepo = repo

@@ -147,6 +147,9 @@ jobs:
 
       - name: Build release APK
         run: ./gradlew assembleRelease
+        env:
+          REPORTING_GH_TOKEN: ${{ secrets.REPORTING_GH_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Commit version bump
         run: |

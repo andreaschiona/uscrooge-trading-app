@@ -31,6 +31,11 @@
         "timeout": 120000,
         "chunkTimeout": 30000
       }
+    },
+    "gemini": {
+      "options": {
+        "apiKey": "{env:GEMINI_API_KEY}"
+      }
     }
   }
 }

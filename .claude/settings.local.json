@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew assembleDebug --no-daemon -q)",
+      "Bash(./gradlew compileDebugKotlin --no-daemon)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app status)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app diff)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app pull --rebase)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app log --oneline origin/main..main)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app log --oneline main..origin/main)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app stash)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app stash pop)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app add app/src/main/java/com/uscrooge/app/data/repository/TradingRepository.kt app/src/main/java/com/uscrooge/app/strategy/TradingStrategy.kt app/src/main/java/com/uscrooge/app/ui/screen/SignalsScreen.kt)",
+      "Bash(git -C c:/Users/Schiona/workspace/uscrooge-app commit -m ' *)"
+    ]
+  }
+}

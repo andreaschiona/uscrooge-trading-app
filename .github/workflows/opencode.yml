@@ -42,6 +42,6 @@ jobs:
           OPENCODE_TELEMETRY: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          model: opencode/internlm-2.5-free
+          model: opencode/deepseek-v4-flash-free
           share: false
           use_github_token: true

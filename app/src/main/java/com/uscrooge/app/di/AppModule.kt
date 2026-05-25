@@ -8,6 +8,7 @@ import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.local.TradingDatabase
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.integration.GitHubIssueReporter
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,6 +47,12 @@ object AppModule {
     fun provideConfigRepository(
         @ApplicationContext context: Context
     ): ConfigRepository = ConfigRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideGitHubIssueReporter(
+        @ApplicationContext context: Context
+    ): GitHubIssueReporter = GitHubIssueReporter(context)
 }
 
 @Module

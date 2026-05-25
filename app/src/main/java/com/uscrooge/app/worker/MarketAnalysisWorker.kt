@@ -15,6 +15,7 @@ import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.executor.CircuitBreaker
 import com.uscrooge.app.executor.OrderExecutor
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.notification.NotificationHelper
 import com.uscrooge.app.strategy.TradingStrategy
 import dagger.assisted.Assisted
@@ -33,7 +34,8 @@ class MarketAnalysisWorker @AssistedInject constructor(
     private val orderExecutor: OrderExecutor,
     private val notificationHelper: NotificationHelper,
     private val tradingStrategy: TradingStrategy,
-    private val circuitBreaker: CircuitBreaker
+    private val circuitBreaker: CircuitBreaker,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -168,9 +170,28 @@ class MarketAnalysisWorker @AssistedInject constructor(
                         e.message ?: "Unknown error"
                     )
                 }
+                reportToGitHub("Market analysis failed", e)
             } catch (_: Exception) { }
             Result.retry()
         }
+    }
+
+    private suspend fun reportToGitHub(context: String, error: Throwable) {
+        if (!gitHubIssueReporter.isConfigured()) return
+        val title = "[${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}] $context"
+        val body = buildString {
+            appendLine("## Error Report")
+            appendLine()
+            appendLine("- **Context:** $context")
+            appendLine("- **Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("- **Error:** ${error.message ?: "Unknown"}")
+            appendLine()
+            appendLine("### Stack Trace")
+            appendLine("```")
+            appendLine(error.stackTraceToString())
+            appendLine("```")
+        }
+        gitHubIssueReporter.reportError(title, body)
     }
 
     companion object {

@@ -33,6 +33,15 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        val githubRepo = providers.environmentVariable("GITHUB_REPOSITORY")
+            .orElse("andreaschiona/uscrooge-trading-app")
+            .get()
+        val githubToken = providers.environmentVariable("REPORTING_GH_TOKEN")
+            .orElse(providers.environmentVariable("GITHUB_TOKEN").orElse(""))
+            .get()
+        buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
+        buildConfigField("String", "GITHUB_TOKEN", "\"$githubToken\"")
     }
 
     signingConfigs {
@@ -83,6 +92,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

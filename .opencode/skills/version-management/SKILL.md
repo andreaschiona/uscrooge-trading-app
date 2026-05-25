@@ -1,3 +1,8 @@
+---
+name: version-management
+description: Gestione del versionamento semantico del progetto tramite conventional commit con workflow issue, branch, commit e PR
+---
+
 # Skill: Version Management
 
 Regole per gestire il versionamento semantico del progetto tramite conventional commit.

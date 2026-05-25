@@ -5,6 +5,9 @@
     "paths": [".opencode/skills"]
   },
   "permission": {
+    "skill": {
+      "*": "allow"
+    },
     "read": "allow",
     "edit": "allow",
     "glob": "allow",

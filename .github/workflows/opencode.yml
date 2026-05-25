@@ -7,7 +7,7 @@ on:
     types: [created]
 
 concurrency:
-  group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.reply_to_id }}
+  group: opencode-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.reply_to_id }}-${{ contains(github.event.comment.body, '/oc') && 'cmd' || 'other' }}
   cancel-in-progress: true
 
 jobs:

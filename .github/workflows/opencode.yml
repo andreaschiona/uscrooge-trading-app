@@ -23,7 +23,7 @@ jobs:
         startsWith(github.event.comment.body, '/opencode')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       id-token: write
       contents: write
@@ -36,12 +36,57 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Run opencode
-        uses: anomalyco/opencode/github@latest
+      - name: Get opencode version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(curl -sf https://api.github.com/repos/anomalyco/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+          echo "version=${VERSION:-v1.15.10}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache opencode
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.opencode/bin
+          key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+
+      - name: Install opencode
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Add opencode to PATH
+        shell: bash
+        run: echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+
+      - name: Run opencode (with retry)
+        shell: bash
+        id: run_opencode
         env:
+          MODEL: opencode/deepseek-v4-flash-free
+          AGENT: ""
+          SHARE: false
+          PROMPT: ""
+          USE_GITHUB_TOKEN: true
+          MENTIONS: /opencode,/oc
+          VARIANT: minimal
+          OIDC_BASE_URL: ""
           OPENCODE_TELEMETRY: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          model: opencode/deepseek-v4-flash-free
-          share: false
-          use_github_token: true
+        run: |
+          MAX_RETRIES=3
+          RETRY_DELAY=15
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "opencode run attempt $i of $MAX_RETRIES"
+            if opencode github run; then
+              echo "opencode completed successfully"
+              exit 0
+            fi
+            exit_code=$?
+            if [ $i -eq $MAX_RETRIES ]; then
+              echo "All $MAX_RETRIES attempts failed, last exit code: $exit_code"
+              exit $exit_code
+            fi
+            echo "Attempt $i failed (exit code: $exit_code), retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done

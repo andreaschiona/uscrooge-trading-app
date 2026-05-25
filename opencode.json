@@ -24,5 +24,13 @@
   "tool_output": {
     "max_lines": 150,
     "max_bytes": 6144
+  },
+  "provider": {
+    "opencode": {
+      "options": {
+        "timeout": 120000,
+        "chunkTimeout": 30000
+      }
+    }
   }
 }

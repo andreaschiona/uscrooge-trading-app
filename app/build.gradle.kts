@@ -7,6 +7,11 @@ plugins {
 
 import java.util.Properties
 
+val appVersionMajor: String by project
+val appVersionMinor: String by project
+val appVersionPatch: String by project
+val appVersionCode: String by project
+
 android {
     val keystoreProperties = Properties()
     val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -21,8 +26,8 @@ android {
         applicationId = "com.uscrooge.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "1.2.18"
+        versionCode = appVersionCode.toInt()
+        versionName = "${appVersionMajor}.${appVersionMinor}.${appVersionPatch}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -52,22 +52,76 @@ jobs:
           # Remove leading spaces
           sed -i 's/^          //' keystore.properties
 
+      - name: Determine bump type from commits
+        id: bump_type
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tag found, defaulting to PATCH bump"
+            echo "type=PATCH" >> "$GITHUB_OUTPUT"
+          else
+            COMMITS=$(git log "$LAST_TAG"..HEAD --format="%s")
+            echo "Commits since $LAST_TAG:"
+            echo "$COMMITS"
+
+            BUMP="PATCH"
+            while IFS= read -r msg; do
+              if echo "$msg" | grep -qi "BREAKING CHANGE"; then
+                BUMP="MAJOR"
+                break
+              fi
+              if echo "$msg" | grep -qE "^.*!:" || echo "$msg" | grep -qE "^.*\!:"; then
+                BUMP="MAJOR"
+                break
+              fi
+            done <<< "$COMMITS"
+
+            if [ "$BUMP" = "PATCH" ]; then
+              while IFS= read -r msg; do
+                if echo "$msg" | grep -qi "^feat"; then
+                  BUMP="MINOR"
+                  break
+                fi
+              done <<< "$COMMITS"
+            fi
+
+            echo "type=$BUMP" >> "$GITHUB_OUTPUT"
+            echo "Bump type: $BUMP"
+          fi
+
       - name: Increment version
         id: version
         run: |
-          # Read current version
-          CURRENT_NAME=$(grep 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
-          CURRENT_CODE=$(grep 'versionCode' app/build.gradle.kts | sed 's/[^0-9]//g')
+          # Read current version from gradle.properties
+          MAJOR=$(grep '^appVersionMajor=' gradle.properties | sed 's/.*=//')
+          MINOR=$(grep '^appVersionMinor=' gradle.properties | sed 's/.*=//')
+          PATCH=$(grep '^appVersionPatch=' gradle.properties | sed 's/.*=//')
+          CODE=$(grep '^appVersionCode=' gradle.properties | sed 's/.*=//')
 
-          # Increment patch version
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_NAME"
-          NEW_PATCH=$((PATCH + 1))
-          NEW_NAME="${MAJOR}.${MINOR}.${NEW_PATCH}"
-          NEW_CODE=$((CURRENT_CODE + 1))
+          BUMP_TYPE="${{ steps.bump_type.outputs.type }}"
 
-          # Update build.gradle.kts
-          sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
-          sed -i "s/versionName = \"$CURRENT_NAME\"/versionName = \"$NEW_NAME\"/" app/build.gradle.kts
+          case "$BUMP_TYPE" in
+            MAJOR)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            MINOR)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            *)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          NEW_CODE=$((CODE + 1))
+          NEW_NAME="${MAJOR}.${MINOR}.${PATCH}"
+
+          # Update gradle.properties
+          sed -i "s/^appVersionMajor=.*/appVersionMajor=$MAJOR/" gradle.properties
+          sed -i "s/^appVersionMinor=.*/appVersionMinor=$MINOR/" gradle.properties
+          sed -i "s/^appVersionPatch=.*/appVersionPatch=$PATCH/" gradle.properties
+          sed -i "s/^appVersionCode=.*/appVersionCode=$NEW_CODE/" gradle.properties
 
           echo "version=$NEW_NAME" >> "$GITHUB_OUTPUT"
           echo "Version: $NEW_NAME (code: $NEW_CODE)"
@@ -98,7 +152,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app/build.gradle.kts
+          git add gradle.properties
           # Aggiunto [skip ci] per impedire a questo commit di scatenare un nuovo giro di release
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }} [skip ci]"
           git push

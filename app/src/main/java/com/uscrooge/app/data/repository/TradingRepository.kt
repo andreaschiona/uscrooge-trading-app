@@ -354,7 +354,7 @@ class TradingRepository @Inject constructor(
         val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
         val wishlistPairs = config.tradingPairs.map { it.uppercase() }.toSet()
         val cryptoPairsToAnalyze = (wishlistPairs + dynamicKrakenPairs)
-            .toList()
+            .distinct()
             // wishlist items first, then dynamic additions
             .sortedWith(compareByDescending { it in wishlistPairs })
             .take(config.maxCryptoPairsToScan)

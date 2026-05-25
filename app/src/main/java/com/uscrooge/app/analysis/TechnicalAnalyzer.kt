@@ -175,10 +175,12 @@ class TechnicalAnalyzer {
         val averageVolume = volumes.average()
         val volumeRatio = currentVolume / averageVolume
 
+        val safeVolumeRatio = if (averageVolume > 0.0) volumeRatio else 0.0
+
         return VolumeAnalysis(
             currentVolume = currentVolume,
             averageVolume = averageVolume,
-            volumeRatio = volumeRatio
+            volumeRatio = safeVolumeRatio
         )
     }
 
@@ -269,8 +271,12 @@ class TechnicalAnalyzer {
             }
 
             // Morning Star: Bearish, small body, bullish
+            val candle2Range = candle2.high - candle2.low
+            val candle2BodyRatio = if (candle2Range > 0.0) {
+                abs(candle2.close - candle2.open) / candle2Range
+            } else 0.0
             val morningStar = candle1.close < candle1.open &&
-                    abs(candle2.close - candle2.open) / (candle2.high - candle2.low) < 0.3 &&
+                    candle2BodyRatio < 0.3 &&
                     candle3.close > candle3.open &&
                     candle3.close > (candle1.open + candle1.close) / 2
 
@@ -280,7 +286,7 @@ class TechnicalAnalyzer {
 
             // Evening Star: Bullish, small body, bearish
             val eveningStar = candle1.close > candle1.open &&
-                    abs(candle2.close - candle2.open) / (candle2.high - candle2.low) < 0.3 &&
+                    candle2BodyRatio < 0.3 &&
                     candle3.close < candle3.open &&
                     candle3.close < (candle1.open + candle1.close) / 2
 

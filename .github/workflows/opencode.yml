@@ -23,7 +23,7 @@ jobs:
         startsWith(github.event.comment.body, '/opencode')
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       id-token: write
       contents: write

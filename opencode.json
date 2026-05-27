@@ -5,20 +5,7 @@
     "paths": [".opencode/skills"]
   },
   "permission": {
-    "skill": {
-      "*": "allow"
-    },
-    "read": "allow",
-    "edit": "allow",
-    "glob": "allow",
-    "grep": "allow",
-    "bash": {
-      "./gradlew.bat *": "allow",
-      "./gradlew *": "allow",
-      "git *": "allow",
-      "gh *": "allow",
-      "*": "ask"
-    }
+    "bash": "allow"
   },
   "compaction": {
     "auto": true,

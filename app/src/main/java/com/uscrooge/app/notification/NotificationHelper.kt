@@ -136,6 +136,12 @@ class NotificationHelper @Inject constructor(
         }
     }
 
+    fun cancelErrorNotification() {
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            NotificationManagerCompat.from(context).cancel(ERROR_NOTIFICATION_ID)
+        }
+    }
+
     fun sendErrorNotification(title: String, message: String?) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

@@ -105,18 +105,24 @@ class MarketAnalysisWorker @AssistedInject constructor(
 
             // Notify analysis errors
             val analysisLog = repository.lastAnalysisLog.value
-            if (analysisLog != null && analysisLog.errorCount > 0) {
-                val errorPairs = analysisLog.entries
-                    .filter { !it.isSuccess }
-                    .joinToString(", ") { "${it.pair}: ${it.errorMessage}" }
-                if (config.notifyOnErrors) {
-                    notificationHelper.sendErrorNotification(
-                        "Analysis errors (${analysisLog.errorCount}/${analysisLog.totalCount})",
-                        errorPairs
+            if (analysisLog != null) {
+                if (analysisLog.errorCount > 0) {
+                    val errorPairs = analysisLog.entries
+                        .filter { !it.isSuccess }
+                        .joinToString(", ") { "${it.pair}: ${it.errorMessage}" }
+                    if (config.notifyOnErrors) {
+                        notificationHelper.sendErrorNotification(
+                            "Analysis errors (${analysisLog.errorCount}/${analysisLog.totalCount})",
+                            errorPairs
+                        )
+                    }
+                    reportToGitHub(
+                        "Analysis failed for ${analysisLog.errorCount}/${analysisLog.totalCount} pairs",
+                        RuntimeException(errorPairs)
                     )
+                } else {
+                    notificationHelper.cancelErrorNotification()
                 }
-                reportToGitHub("Analysis failed for ${analysisLog.errorCount}/${analysisLog.totalCount} pairs",
-                    RuntimeException(errorPairs))
             }
 
             // Send notifications for new signals

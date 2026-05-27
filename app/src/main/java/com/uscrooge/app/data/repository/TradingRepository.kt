@@ -108,20 +108,14 @@ class TradingRepository @Inject constructor(
     suspend fun updatePosition(position: Position) = positionDao.updatePosition(position)
 
     // Market data
-    suspend fun getTicker(pair: TradingPair): Result<Ticker> {
-        return if (isCryptoPair(pair.symbol)) {
-            krakenApiClient.getTicker(pair)
-        } else {
-            alpacaApiClient.getTicker(pair.base)
-        }
+    suspend fun getTicker(pair: TradingPair, broker: BrokerApi? = null): Result<Ticker> {
+        val activeBroker = broker ?: if (isCryptoPair(pair.symbol)) krakenApiClient else alpacaApiClient
+        return activeBroker.getTicker(pair.symbol)
     }
 
-    suspend fun getOHLC(pair: TradingPair, interval: Int = 60): Result<List<OHLC>> {
-        return if (isCryptoPair(pair.symbol)) {
-            krakenApiClient.getOHLC(pair, interval)
-        } else {
-            alpacaApiClient.getOHLC(pair.base, interval)
-        }
+    suspend fun getOHLC(pair: TradingPair, interval: Int = 60, broker: BrokerApi? = null): Result<List<OHLC>> {
+        val activeBroker = broker ?: if (isCryptoPair(pair.symbol)) krakenApiClient else alpacaApiClient
+        return activeBroker.getOHLC(pair.symbol, interval)
     }
 
     suspend fun getMultiTimeframeOHLC(
@@ -259,12 +253,13 @@ class TradingRepository @Inject constructor(
     suspend fun analyzePairAndGenerateSignal(
         pair: String,
         config: TradingConfig,
-        availableBalance: Double
+        availableBalance: Double,
+        broker: BrokerApi
     ): Result<SignalResult> {
         return try {
             val tradingPair = TradingPair.fromString(pair)
 
-            val ohlcResult = getOHLC(tradingPair, config.primaryTimeframe)
+            val ohlcResult = getOHLC(tradingPair, config.primaryTimeframe, broker)
             if (ohlcResult.isFailure) {
                 return Result.failure(ohlcResult.exceptionOrNull()!!)
             }
@@ -274,7 +269,7 @@ class TradingRepository @Inject constructor(
                 return Result.failure(Exception("Not enough historical data"))
             }
 
-            val tickerResult = getTicker(tradingPair)
+            val tickerResult = getTicker(tradingPair, broker)
             if (tickerResult.isFailure) {
                 return Result.failure(tickerResult.exceptionOrNull()!!)
             }
@@ -282,7 +277,7 @@ class TradingRepository @Inject constructor(
             val currentPrice = tickerResult.getOrNull()!!.lastTrade
 
             val higherTimeframeTrends = if (config.useMultiTimeframe) {
-                fetchHigherTimeframeTrends(tradingPair, config)
+                fetchHigherTimeframeTrends(tradingPair, config, broker)
             } else {
                 emptyList()
             }
@@ -308,12 +303,13 @@ class TradingRepository @Inject constructor(
 
     private suspend fun fetchHigherTimeframeTrends(
         pair: TradingPair,
-        config: TradingConfig
+        config: TradingConfig,
+        broker: BrokerApi
     ): List<Trend> {
         val trends = mutableListOf<Trend>()
 
         try {
-            val secondaryResult = getOHLC(pair, config.secondaryTimeframe)
+            val secondaryResult = getOHLC(pair, config.secondaryTimeframe, broker)
             if (secondaryResult.isSuccess) {
                 val data = secondaryResult.getOrNull()!!
                 if (data.size >= 10) {
@@ -326,7 +322,7 @@ class TradingRepository @Inject constructor(
         }
 
         try {
-            val tertiaryResult = getOHLC(pair, config.tertiaryTimeframe)
+            val tertiaryResult = getOHLC(pair, config.tertiaryTimeframe, broker)
             if (tertiaryResult.isSuccess) {
                 val data = tertiaryResult.getOrNull()!!
                 if (data.size >= 10) {
@@ -362,7 +358,7 @@ class TradingRepository @Inject constructor(
 
         for (pair in cryptoPairsToAnalyze) {
             try {
-                val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
+                val result = analyzePairAndGenerateSignal(pair, config, availableBalance, krakenApiClient)
                 if (result.isSuccess) {
                     val signalResult = result.getOrNull()!!
                     signalResult.signal?.let { signals.add(it) }
@@ -441,7 +437,7 @@ class TradingRepository @Inject constructor(
                 for (symbol in stocksToAnalyze) {
                     val pair = "$symbol/USD"
                     try {
-                        val result = analyzePairAndGenerateSignal(pair, config, availableBalance)
+                        val result = analyzePairAndGenerateSignal(pair, config, availableBalance, alpacaApiClient)
                         if (result.isSuccess) {
                             val signalResult = result.getOrNull()!!
                             signalResult.signal?.let { signals.add(it) }

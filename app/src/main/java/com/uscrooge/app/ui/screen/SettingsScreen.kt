@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.uscrooge.app.BuildConfig
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.ui.viewmodel.SaveState
 import com.uscrooge.app.ui.viewmodel.SettingsViewModel
@@ -476,6 +477,20 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+
+                item { Spacer(modifier = Modifier.height(24.dp)) }
+
+                item {
+                    Text(
+                        text = "v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                 }
 
                 item { Spacer(modifier = Modifier.height(32.dp)) }

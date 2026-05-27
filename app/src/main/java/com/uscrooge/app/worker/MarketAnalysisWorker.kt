@@ -15,6 +15,7 @@ import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.executor.CircuitBreaker
 import com.uscrooge.app.executor.OrderExecutor
+import com.uscrooge.app.BuildConfig
 import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.notification.NotificationHelper
 import com.uscrooge.app.strategy.TradingStrategy
@@ -198,6 +199,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
             appendLine()
             appendLine("- **Context:** $context")
             appendLine("- **Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            appendLine("- **App Version:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("- **Error:** ${error.message ?: "Unknown"}")
             appendLine()
             appendLine("### Stack Trace")

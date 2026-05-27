@@ -46,7 +46,6 @@ class OrderExecutor @Inject constructor(
         private const val ORDER_POLL_INTERVAL_MS = 2000L
         private const val ORDER_POLL_TIMEOUT_MS = 30000L
         private const val MAX_FILL_RETRIES = 5
-        private val CRYPTO_ASSETS = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
     }
 
     fun updateConfig(newConfig: TradingConfig) {
@@ -54,8 +53,8 @@ class OrderExecutor @Inject constructor(
     }
 
     private fun getBrokerForPair(pair: String): BrokerApi {
-        val base = pair.substringBefore("/").uppercase()
-        return if (base in CRYPTO_ASSETS) krakenApiClient else alpacaApiClient
+        val quote = pair.substringAfter("/").uppercase()
+        return if (quote == "EUR") krakenApiClient else alpacaApiClient
     }
 
     private fun getBrokerForPosition(position: Position): BrokerApi {

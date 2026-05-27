@@ -40,7 +40,6 @@ class TradingRepository @Inject constructor(
         private val EUR_ASSETS = setOf("ZEUR", "EUR", "XEUR")
         private const val PREFS_NAME = "analysis_log_prefs"
         private const val KEY_LAST_LOG = "last_analysis_log"
-        private val CRYPTO_ASSETS = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
     }
 
     private val gson = Gson()
@@ -71,8 +70,8 @@ class TradingRepository @Inject constructor(
     }
 
     private fun isCryptoPair(pair: String): Boolean {
-        val base = pair.substringBefore("/").uppercase()
-        return base in CRYPTO_ASSETS
+        val quote = pair.substringAfter("/").uppercase()
+        return quote == "EUR"
     }
 
     // Signals

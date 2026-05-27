@@ -6,6 +6,7 @@ import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.worker.MarketAnalysisWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +21,8 @@ import javax.net.ssl.SSLException
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val configRepository: ConfigRepository
+    private val configRepository: ConfigRepository,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) : ViewModel() {
 
     private enum class CredentialsValidationStatus {
@@ -74,7 +76,8 @@ class SettingsViewModel @Inject constructor(
                     currentConfig.krakenApiSecret.trim() != normalizedConfig.krakenApiSecret.trim() ||
                     currentConfig.apiTimeout != normalizedConfig.apiTimeout ||
                     currentConfig.alpacaApiKey.trim() != normalizedConfig.alpacaApiKey.trim() ||
-                    currentConfig.alpacaApiSecret.trim() != normalizedConfig.alpacaApiSecret.trim()
+                    currentConfig.alpacaApiSecret.trim() != normalizedConfig.alpacaApiSecret.trim() ||
+                    currentConfig.githubToken.trim() != normalizedConfig.githubToken.trim()
 
                 if (credentialsChanged) {
                     val credentialsValidation = validateKrakenCredentials(normalizedConfig)
@@ -113,6 +116,7 @@ class SettingsViewModel @Inject constructor(
                 }
 
                 configRepository.updateConfig(normalizedConfig)
+                gitHubIssueReporter.configureToken(normalizedConfig.githubToken)
                 _saveState.value = SaveState.Success("Settings saved successfully")
 
                 // Reset state after 2 seconds
@@ -137,7 +141,8 @@ class SettingsViewModel @Inject constructor(
             krakenApiKey = clean(config.krakenApiKey),
             krakenApiSecret = clean(config.krakenApiSecret),
             alpacaApiKey = clean(config.alpacaApiKey),
-            alpacaApiSecret = clean(config.alpacaApiSecret)
+            alpacaApiSecret = clean(config.alpacaApiSecret),
+            githubToken = clean(config.githubToken)
         )
     }
 

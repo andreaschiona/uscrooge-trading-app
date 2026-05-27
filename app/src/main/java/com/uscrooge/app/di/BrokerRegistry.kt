@@ -7,6 +7,7 @@ import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.executor.OrderExecutor
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.strategy.TradingStrategy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.catch
@@ -27,7 +28,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class BrokerRegistry @Inject constructor(
-    private val configRepository: ConfigRepository
+    private val configRepository: ConfigRepository,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) {
 
     val krakenApiClient: KrakenApiClient = KrakenApiClient(
@@ -61,17 +63,21 @@ class BrokerRegistry @Inject constructor(
 
     /**
      * Returns the broker for a given pair/symbol.
-     * Pairs like "BTC/EUR" -> Kraken, symbols like "AAPL/USD" -> Alpaca
+     * Pairs with EUR quote currency -> Kraken (crypto)
+     * Pairs with USD quote currency -> Alpaca (stocks)
      */
     fun getBrokerForPair(config: TradingConfig, pair: String): BrokerApi? {
-        val base = pair.substringBefore("/").uppercase()
-        val cryptoAssets = setOf("BTC", "ETH", "SOL", "XRP", "DOT", "ADA", "MATIC", "LINK", "AVAX", "ATOM", "UNI", "LTC")
-        return if (base in cryptoAssets) {
-            if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) krakenApiClient else null
-        } else {
-            if (config.enableStockTrading &&
-                config.alpacaApiKey.isNotBlank() &&
-                config.alpacaApiSecret.isNotBlank()) alpacaApiClient else null
+        val quote = pair.substringAfter("/").uppercase()
+        return when (quote) {
+            "EUR" -> {
+                if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) krakenApiClient else null
+            }
+            "USD" -> {
+                if (config.enableStockTrading &&
+                    config.alpacaApiKey.isNotBlank() &&
+                    config.alpacaApiSecret.isNotBlank()) alpacaApiClient else null
+            }
+            else -> null
         }
     }
 
@@ -111,6 +117,7 @@ class BrokerRegistry @Inject constructor(
             )
             strategyRef?.updateConfig(config)
             executorRef?.updateConfig(config)
+            gitHubIssueReporter.configureToken(config.githubToken)
         }
     }
 

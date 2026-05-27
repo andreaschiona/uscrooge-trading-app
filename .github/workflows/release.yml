@@ -146,7 +146,7 @@ jobs:
         run: exit 1
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
+        run: ./gradlew --no-daemon assembleRelease
         env:
           REPORTING_GH_TOKEN: ${{ secrets.REPORTING_GH_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}

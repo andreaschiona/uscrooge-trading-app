@@ -93,10 +93,10 @@ class GitHubIssueReporter(
         title: String,
         body: String,
         labels: List<String> = listOf("bug", "auto-reported")
-    ): Result<Int> {
+    ): Result<String> {
         if (!isConfigured()) {
             Log.e(TAG, "Cannot report error to GitHub: reporter not configured")
-            return Result.failure(IllegalStateException("GitHub not configured"))
+            return Result.failure(IllegalStateException("GitHub issue reporter is not configured. Please check your GitHub token and repository settings."))
         }
 
         val token = getToken()
@@ -107,15 +107,15 @@ class GitHubIssueReporter(
                 val existing = findExistingIssue(token, currentRepo, title)
                 if (existing != null) {
                     Log.i(TAG, "Open issue already exists: #${existing.number} - $title")
-                    return@withContext Result.success(existing.number)
+                    return@withContext Result.success("Issue already exists: #${existing.number} - $title")
                 }
 
                 val number = createIssue(token, currentRepo, title, body, labels)
                 Log.i(TAG, "Created GitHub issue #$number: $title")
-                Result.success(number)
+                Result.success("Created GitHub issue #$number: $title")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to report error to GitHub", e)
-                Result.failure(e)
+                Result.failure(Exception("Failed to report issue: ${e.message ?: "Unknown error"}", e))
             }
         }
     }

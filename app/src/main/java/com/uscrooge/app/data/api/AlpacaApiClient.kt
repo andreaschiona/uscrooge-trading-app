@@ -45,6 +45,12 @@ class AlpacaApiClient(
     private var apiServiceCacheKey = ""
 
     @Volatile
+    private var dataApiServiceCache: AlpacaApiService? = null
+
+    @Volatile
+    private var dataApiServiceCacheKey = ""
+
+    @Volatile
     private var okHttpClientCache: OkHttpClient? = null
 
     // Cached market hours state
@@ -114,6 +120,8 @@ class AlpacaApiClient(
                 shutdownCachedOkHttpClient()
                 apiServiceCache = null
                 apiServiceCacheKey = ""
+                dataApiServiceCache = null
+                dataApiServiceCacheKey = ""
                 marketOpenCache = null
                 marketOpenCacheTime = 0L
             }
@@ -125,6 +133,8 @@ class AlpacaApiClient(
             shutdownCachedOkHttpClient()
             apiServiceCache = null
             apiServiceCacheKey = ""
+            dataApiServiceCache = null
+            dataApiServiceCacheKey = ""
         }
     }
 
@@ -185,22 +195,21 @@ class AlpacaApiClient(
 
     private fun getDataApiService(): AlpacaApiService {
         val cacheKey = "data|$apiKey|$apiSecret|$timeout"
-        // Reuse the same cache since authentication is the same
-        val cached = apiServiceCache
-        if (cached != null && apiServiceCacheKey == cacheKey) {
+        val cached = dataApiServiceCache
+        if (cached != null && dataApiServiceCacheKey == cacheKey) {
             return cached
         }
 
         synchronized(this) {
-            if (apiServiceCache != null && apiServiceCacheKey == cacheKey) {
-                return apiServiceCache!!
+            if (dataApiServiceCache != null && dataApiServiceCacheKey == cacheKey) {
+                return dataApiServiceCache!!
             }
 
             val okHttpClient = OkHttpClient.Builder()
                 .connectTimeout(timeout, TimeUnit.MILLISECONDS)
                 .readTimeout(timeout, TimeUnit.MILLISECONDS)
                 .writeTimeout(timeout, TimeUnit.MILLISECONDS)
-                .addInterceptor(RateLimitInterceptor(rateLimiter))
+                .addInterceptor(RateLimitInterceptor(dataRateLimiter))
                 .addInterceptor(HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor.Level.HEADERS
                 })
@@ -218,8 +227,8 @@ class AlpacaApiClient(
                 .build()
 
             val service = retrofit.create(AlpacaApiService::class.java)
-            apiServiceCache = service
-            apiServiceCacheKey = cacheKey
+            dataApiServiceCache = service
+            dataApiServiceCacheKey = cacheKey
             return service
         }
     }
@@ -529,6 +538,9 @@ class AlpacaApiClient(
         takeProfitPrice: Double?,
         validate: Boolean
     ): Result<String> {
+        if (apiKey.isBlank() || apiSecret.isBlank()) {
+            return Result.failure(Exception("Alpaca API key not configured. Enable stock trading and set your API credentials in Settings."))
+        }
         return try {
             val normalizedSymbol = normalizeSymbol(symbol)
 

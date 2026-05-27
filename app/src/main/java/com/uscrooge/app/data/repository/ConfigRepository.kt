@@ -70,6 +70,7 @@ class ConfigRepository(private val context: Context) {
         private val MAX_DAILY_DRAWDOWN_PERCENT = doublePreferencesKey("max_daily_drawdown_percent")
         private val MAX_CONSECUTIVE_FAILURES = intPreferencesKey("max_consecutive_failures")
         private val CIRCUIT_BREAKER_COOLDOWN_MINUTES = intPreferencesKey("circuit_breaker_cooldown_minutes")
+        private val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
     val configFlow: Flow<TradingConfig> = context.dataStore.data
@@ -125,7 +126,8 @@ class ConfigRepository(private val context: Context) {
                 circuitBreakerEnabled = preferences[CIRCUIT_BREAKER_ENABLED] ?: true,
                 maxDailyDrawdownPercent = preferences[MAX_DAILY_DRAWDOWN_PERCENT] ?: 5.0,
                 maxConsecutiveFailures = preferences[MAX_CONSECUTIVE_FAILURES] ?: 3,
-                circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60
+                circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60,
+                githubToken = preferences[GITHUB_TOKEN] ?: ""
             )
         }
 
@@ -173,6 +175,7 @@ class ConfigRepository(private val context: Context) {
             preferences[MAX_DAILY_DRAWDOWN_PERCENT] = config.maxDailyDrawdownPercent
             preferences[MAX_CONSECUTIVE_FAILURES] = config.maxConsecutiveFailures
             preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] = config.circuitBreakerCooldownMinutes
+            preferences[GITHUB_TOKEN] = config.githubToken
         }
     }
 

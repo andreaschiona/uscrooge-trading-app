@@ -479,6 +479,37 @@ fun SettingsScreen(
                     }
                 }
 
+                // GitHub Integration
+                item {
+                    SettingsSection(title = "GitHub Integration") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = currentConfig.githubToken,
+                                onValueChange = { value ->
+                                    editedConfig = currentConfig.copy(githubToken = value)
+                                },
+                                label = { Text("GitHub Token") },
+                                modifier = Modifier.fillMaxWidth(),
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.None,
+                                    autoCorrect = false,
+                                    keyboardType = KeyboardType.Ascii
+                                ),
+                                singleLine = true,
+                                supportingText = {
+                                    Text("Personal Access Token for auto error reporting")
+                                }
+                            )
+                            Text(
+                                text = "Set in local.properties as reportingGhToken or via env REPORTING_GH_TOKEN.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 item { Spacer(modifier = Modifier.height(24.dp)) }
 
                 item {

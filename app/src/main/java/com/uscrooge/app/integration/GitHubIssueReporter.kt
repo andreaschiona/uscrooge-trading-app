@@ -33,7 +33,14 @@ class GitHubIssueReporter(
         private const val API_BASE = "https://api.github.com"
         private const val PREFS_NAME = "github_credentials"
         private const val KEY_ENCRYPTED_TOKEN = "encrypted_token"
+        private const val KEY_RAW_TOKEN = "raw_token"
         private val JSON = "application/json".toMediaType()
+    }
+
+    fun configureToken(token: String) {
+        if (token.isNotBlank()) {
+            storeToken(token)
+        }
     }
 
     private fun getToken(): String {
@@ -42,9 +49,13 @@ class GitHubIssueReporter(
             try {
                 return securityManager.decrypt(encrypted)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to decrypt stored token, re-encrypting", e)
+                Log.w(TAG, "Failed to decrypt stored token", e)
                 prefs.edit().remove(KEY_ENCRYPTED_TOKEN).apply()
             }
+        }
+        val raw = prefs.getString(KEY_RAW_TOKEN, null)
+        if (!raw.isNullOrBlank()) {
+            return raw
         }
         if (BuildConfig.GITHUB_TOKEN.isNotBlank()) {
             storeToken(BuildConfig.GITHUB_TOKEN)
@@ -54,11 +65,12 @@ class GitHubIssueReporter(
     }
 
     private fun storeToken(token: String) {
+        prefs.edit().putString(KEY_RAW_TOKEN, token).apply()
         try {
             val encrypted = securityManager.encrypt(token)
             prefs.edit().putString(KEY_ENCRYPTED_TOKEN, encrypted).apply()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to encrypt and store token", e)
+            Log.e(TAG, "Failed to encrypt and store token (raw fallback saved)", e)
         }
     }
 
@@ -67,7 +79,12 @@ class GitHubIssueReporter(
     fun isConfigured(): Boolean {
         val hasToken = getToken().isNotBlank()
         val hasRepo = repo.isNotBlank() && repo != "unknown/repo"
-        if (!hasToken) Log.w(TAG, "GitHub token not available (set REPORTING_GH_TOKEN secret and build in CI)")
+        if (!hasToken) {
+            val hasBuildConfig = BuildConfig.GITHUB_TOKEN.isNotBlank()
+            val hasRawFallback = !prefs.getString(KEY_RAW_TOKEN, null).isNullOrBlank()
+            val hasEncrypted = prefs.getString(KEY_ENCRYPTED_TOKEN, null) != null
+            Log.w(TAG, "GitHub token not available (BuildConfig=$hasBuildConfig, rawFallback=$hasRawFallback, encrypted=$hasEncrypted)")
+        }
         if (!hasRepo) Log.w(TAG, "GitHub repo not set (GITHUB_REPOSITORY env missing)")
         return hasToken && hasRepo
     }

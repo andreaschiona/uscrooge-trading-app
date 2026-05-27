@@ -44,6 +44,9 @@ data class TradingConfig(
     val stockTradingPairs: List<String> = listOf("AAPL/USD", "MSFT/USD", "GOOGL/USD"),
     val enableStockTrading: Boolean = false,
 
+    // GitHub integration
+    val githubToken: String = "",
+
     // Dynamic symbol discovery limits
     val maxCryptoPairsToScan: Int = 15,          // Max crypto pairs scanned (wishlist + dynamic)
     val maxStockPairsToScan: Int = 20,           // Max stock pairs scanned (wishlist + dynamic)

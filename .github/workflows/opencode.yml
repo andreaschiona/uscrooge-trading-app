@@ -36,6 +36,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      - name: Install jq
+        shell: bash
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
+
       - name: Get opencode version
         id: version
         shell: bash
@@ -85,27 +89,19 @@ jobs:
         run: |
           echo "Selected model: $MODEL"
 
-          # Inject model into opencode.json (opencode github run reads model from config)
-          if command -v jq &> /dev/null; then
-            jq --arg model "$MODEL" '.model = $model' opencode.json > opencode.tmp.json && mv opencode.tmp.json opencode.json
-            echo "Injected model '$MODEL' into opencode.json"
-          else
-            echo "Warning: jq not available, skipping model injection"
-          fi
+          jq --arg model "$MODEL" '.model = $model' opencode.json > opencode.tmp.json && mv opencode.tmp.json opencode.json
+          echo "Injected model '$MODEL' into opencode.json"
 
           MAX_RETRIES=3
           RETRY_DELAY=15
           for i in $(seq 1 $MAX_RETRIES); do
             echo "opencode run attempt $i of $MAX_RETRIES"
-            set +e
-            opencode github run
-            exit_code=$?
-            set -e
-            echo "opencode exit code: $exit_code"
-            if [ $exit_code -eq 0 ]; then
+            if opencode github run; then
               echo "opencode completed successfully"
               exit 0
             fi
+            exit_code=$?
+            echo "opencode exit code: $exit_code"
             if [ $i -eq $MAX_RETRIES ]; then
               echo "All $MAX_RETRIES attempts failed, last exit code: $exit_code"
               exit 1

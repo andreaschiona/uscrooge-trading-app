@@ -39,11 +39,11 @@ class GitHubIssueReporter(
     private fun getToken(): String {
         val encrypted = prefs.getString(KEY_ENCRYPTED_TOKEN, null)
         if (encrypted != null) {
-            return try {
-                securityManager.decrypt(encrypted)
+            try {
+                return securityManager.decrypt(encrypted)
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to decrypt stored token", e)
-                ""
+                Log.w(TAG, "Failed to decrypt stored token, re-encrypting", e)
+                prefs.edit().remove(KEY_ENCRYPTED_TOKEN).apply()
             }
         }
         if (BuildConfig.GITHUB_TOKEN.isNotBlank()) {

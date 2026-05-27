@@ -368,7 +368,7 @@ class AlpacaApiClient(
             val timeframe = intervalToTimeframe(interval)
             val now = ZonedDateTime.now(java.time.ZoneOffset.UTC)
             val startTime = when {
-                interval <= 60 -> now.minus(7, ChronoUnit.DAYS)
+                interval <= 60 -> now.minus(21, ChronoUnit.DAYS)
                 interval <= 360 -> now.minus(30, ChronoUnit.DAYS)
                 interval <= 1440 -> now.minus(90, ChronoUnit.DAYS)
                 else -> now.minus(180, ChronoUnit.DAYS)
@@ -388,12 +388,12 @@ class AlpacaApiClient(
                 val ohlcList = parseBars(jsonString, normalizedSymbol)
                 Log.d(TAG, "Parsed bars for $symbol: ${ohlcList.size} items")
 
-                if (ohlcList.isEmpty()) {
-                    Log.w(TAG, "No OHLC data for $symbol (timeframe=$timeframe), trying daily fallback")
+                if (ohlcList.size < 50) {
+                    Log.w(TAG, "Insufficient OHLC data for $symbol (${ohlcList.size} bars, need 50), trying daily fallback")
                     if (timeframe != "1Day") {
                         return getOHLCWithTimeframe(symbol, "1Day", now)
                     }
-                    Result.failure(Exception("No OHLC data for $symbol (timeframe=$timeframe)"))
+                    Result.failure(Exception("Not enough OHLC data for $symbol (timeframe=$timeframe, ${ohlcList.size} bars)"))
                 } else {
                     Log.d(TAG, "Successfully parsed ${ohlcList.size} OHLC bars for $symbol")
                     Result.success(ohlcList)

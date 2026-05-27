@@ -102,7 +102,12 @@ class SignalsViewModel @Inject constructor(
             appendLine(error.stackTraceToString())
             appendLine("```")
         }
-        gitHubIssueReporter.reportError(title, body)
+        val result = gitHubIssueReporter.reportError(title, body)
+        result.onSuccess { message ->
+            _executionState.value = ExecutionState.Success(message)
+        }.onFailure { throwable ->
+            _executionState.value = ExecutionState.Error(throwable.message ?: "Failed to report issue to GitHub.")
+        }
     }
 
     fun ignoreSignal(signal: TradingSignal) {

@@ -22,7 +22,7 @@
         "chunkTimeout": 60000
       }
     },
-    "gemini": {
+    "google": {
       "options": {
         "apiKey": "{env:GEMINI_API_KEY}",
         "timeout": 300000,

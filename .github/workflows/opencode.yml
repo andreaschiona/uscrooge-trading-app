@@ -78,7 +78,7 @@ jobs:
         run: |
           COMMENT="${{ github.event.comment.body }}"
           if echo "$COMMENT" | grep -qi "GEMINI"; then
-            echo "model=gemini/gemini-2.5-flash" >> "$GITHUB_OUTPUT"
+            echo "model=google/gemini-2.5-flash" >> "$GITHUB_OUTPUT"
           elif echo "$COMMENT" | grep -qi "BIGPICKLE"; then
             echo "model=opencode/big-pickle" >> "$GITHUB_OUTPUT"
           elif echo "$COMMENT" | grep -qi "NEMOTRON"; then

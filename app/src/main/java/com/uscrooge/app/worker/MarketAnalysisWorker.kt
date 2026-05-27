@@ -63,6 +63,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 }
             } catch (e: Exception) {
                 Log.e("MarketAnalysisWorker", "Exit monitoring failed: ${e.message}", e)
+                reportToGitHub("Exit monitoring failed", e)
             }
 
             // Sync positions from both brokers
@@ -72,6 +73,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 }
             } catch (e: Exception) {
                 Log.w("MarketAnalysisWorker", "Kraken position sync failed: ${e.message}")
+                reportToGitHub("Kraken position sync failed", e)
             }
             try {
                 if (config.enableStockTrading && config.alpacaApiKey.isNotBlank() && config.alpacaApiSecret.isNotBlank()) {
@@ -79,6 +81,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 }
             } catch (e: Exception) {
                 Log.w("MarketAnalysisWorker", "Alpaca position sync failed: ${e.message}")
+                reportToGitHub("Alpaca position sync failed", e)
             }
 
             // --- STEP 2: Check circuit breaker before new analysis/trading ---
@@ -101,14 +104,18 @@ class MarketAnalysisWorker @AssistedInject constructor(
 
             // Notify analysis errors
             val analysisLog = repository.lastAnalysisLog.value
-            if (config.notifyOnErrors && analysisLog != null && analysisLog.errorCount > 0) {
+            if (analysisLog != null && analysisLog.errorCount > 0) {
                 val errorPairs = analysisLog.entries
                     .filter { !it.isSuccess }
                     .joinToString(", ") { "${it.pair}: ${it.errorMessage}" }
-                notificationHelper.sendErrorNotification(
-                    "Analysis errors (${analysisLog.errorCount}/${analysisLog.totalCount})",
-                    errorPairs
-                )
+                if (config.notifyOnErrors) {
+                    notificationHelper.sendErrorNotification(
+                        "Analysis errors (${analysisLog.errorCount}/${analysisLog.totalCount})",
+                        errorPairs
+                    )
+                }
+                reportToGitHub("Analysis failed for ${analysisLog.errorCount}/${analysisLog.totalCount} pairs",
+                    RuntimeException(errorPairs))
             }
 
             // Send notifications for new signals
@@ -135,11 +142,17 @@ class MarketAnalysisWorker @AssistedInject constructor(
                                 notificationHelper.sendOrderExecutedNotification(
                                     result.getOrNull()!!
                                 )
-                            } else if (result.isFailure && config.notifyOnErrors) {
-                                notificationHelper.sendErrorNotification(
-                                    "Failed to execute signal for ${signal.pair}",
-                                    result.exceptionOrNull()?.message
-                                )
+                            } else if (result.isFailure) {
+                                val error = result.exceptionOrNull()
+                                if (config.notifyOnErrors) {
+                                    notificationHelper.sendErrorNotification(
+                                        "Failed to execute signal for ${signal.pair}",
+                                        error?.message
+                                    )
+                                }
+                                if (error != null) {
+                                    reportToGitHub("Signal execution failed for ${signal.pair}", error)
+                                }
                             }
                         } catch (e: Exception) {
                             if (config.notifyOnErrors) {
@@ -148,6 +161,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                                     e.message
                                 )
                             }
+                            reportToGitHub("Signal execution failed for ${signal.pair}", e)
                         }
                     }
                 }

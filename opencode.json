@@ -1,8 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"],
+  "instructions": [
+    "AGENTS.md"
+  ],
   "skills": {
-    "paths": [".opencode/skills"]
+    "paths": [
+      ".opencode/skills"
+    ]
   },
   "permission": {
     "bash": "allow"
@@ -29,5 +33,6 @@
         "chunkTimeout": 60000
       }
     }
-  }
+  },
+  "model": "google/gemini-2.5-flash"
 }

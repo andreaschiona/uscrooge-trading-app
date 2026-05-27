@@ -34,11 +34,18 @@ android {
             useSupportLibrary = true
         }
 
+        val localProps = Properties()
+        val localPropsFile = rootProject.file("local.properties")
+        if (localPropsFile.exists()) {
+            localProps.load(localPropsFile.inputStream())
+        }
+
         val githubRepo = providers.environmentVariable("GITHUB_REPOSITORY")
             .orElse("andreaschiona/uscrooge-trading-app")
             .get()
         val githubToken = providers.environmentVariable("REPORTING_GH_TOKEN")
-            .orElse(providers.environmentVariable("GITHUB_TOKEN").orElse(""))
+            .orElse(providers.environmentVariable("GITHUB_TOKEN")
+                .orElse(localProps.getProperty("reportingGhToken", "")))
             .get()
         buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
         buildConfigField("String", "GITHUB_TOKEN", "\"$githubToken\"")

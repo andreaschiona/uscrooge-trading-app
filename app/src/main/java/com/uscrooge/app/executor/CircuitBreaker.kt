@@ -5,6 +5,7 @@ import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.model.TradingConfig
 import kotlinx.coroutines.flow.first
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -122,8 +123,8 @@ class CircuitBreaker @Inject constructor(
         val totalPnL = positions.sumOf { it.unrealizedPnL }
         val drawdownPercent = (totalPnL / totalInvested) * 100
 
-        if (drawdownPercent <= -config.maxDailyDrawdownPercent) {
-            return "Daily drawdown ${String.format("%.1f", drawdownPercent)}% exceeds limit of -${config.maxDailyDrawdownPercent}%"
+        if (drawdownPercent < -config.maxDailyDrawdownPercent) {
+            return "Daily drawdown ${String.format(Locale.US, "%.1f", drawdownPercent)}% exceeds limit of -${config.maxDailyDrawdownPercent}%"
         }
 
         return null

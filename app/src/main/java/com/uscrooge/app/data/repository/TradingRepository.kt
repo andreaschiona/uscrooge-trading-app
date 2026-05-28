@@ -549,13 +549,6 @@ class TradingRepository @Inject constructor(
                 timeout = config.apiTimeout
             )
 
-            val balanceResult = krakenApiClient.getAccountBalance()
-            if (balanceResult.isFailure) {
-                Log.w(TAG, "syncOpenPositions: failed to get balances: ${balanceResult.exceptionOrNull()?.message}")
-                return
-            }
-            val balances = balanceResult.getOrNull() ?: return
-
             val krakenToBase = mapOf(
                 "XXBT" to "BTC", "XBT" to "BTC",
                 "XETH" to "ETH", "ETH" to "ETH",
@@ -571,70 +564,44 @@ class TradingRepository @Inject constructor(
                 TradingPair.fromString(pair).base
             }.toSet()
 
-            val heldAssets = mutableMapOf<String, Double>()
-            for ((krakenAsset, amount) in balances) {
-                if (amount <= 0.0) continue
-                val normalized = krakenAsset.normalizeKrakenAsset()
-                val suffix = krakenAsset.krakenAssetSuffix()
-                if (suffix == "HOLD") continue
+            // 1) Fetch Kraken margin positions via the dedicated endpoint
+            val krakenPositions = krakenApiClient.getOpenPositions().getOrNull().orEmpty()
 
-                val base = krakenToBase[normalized] ?: normalized
-                if (base in configuredBases) {
-                    heldAssets[base] = (heldAssets[base] ?: 0.0) + amount
-                }
+            // 2) Fetch account balances for spot holdings not covered by margin positions
+            val balanceResult = krakenApiClient.getAccountBalance()
+            if (balanceResult.isFailure) {
+                Log.w(TAG, "syncOpenPositions: failed to get balances: ${balanceResult.exceptionOrNull()?.message}")
             }
+            val balances = balanceResult.getOrNull().orEmpty()
 
-            val tradesResult = krakenApiClient.getKrakenTradesHistory()
-            val trades = tradesResult.getOrNull() ?: emptyMap()
+            // Track which bases have active positions (from margin or spot)
+            val activeBases = mutableSetOf<String>()
 
-            val buyTradesByBase = mutableMapOf<String, MutableList<Pair<Double, Double>>>()
-            for ((_, trade) in trades) {
-                if (trade.type != "buy") continue
-                val tradePair = trade.pair
-                val base = resolveBaseFromKrakenPair(tradePair, krakenToBase) ?: continue
-                if (base !in heldAssets) continue
-                val price = trade.price.toDoubleOrNull() ?: continue
-                val vol = trade.vol.toDoubleOrNull() ?: continue
-                buyTradesByBase.getOrPut(base) { mutableListOf() }.add(price to vol)
-            }
+            // --- Process margin positions (OpenPositions endpoint) ---
+            for (pos in krakenPositions) {
+                val base = resolveBaseFromKrakenPair(pos.symbol, krakenToBase) ?: continue
+                if (base !in configuredBases) continue
+                activeBases.add(base)
 
-            val localOpenPositions = positionDao.getOpenPositions().first()
-
-            for ((base, amount) in heldAssets) {
                 val pairSymbol = "$base/EUR"
                 if (pairSymbol !in config.tradingPairs.map { it.uppercase() } &&
                     pairSymbol !in config.tradingPairs) continue
 
-                val buyTrades = buyTradesByBase[base]
-                val avgEntryPrice = if (!buyTrades.isNullOrEmpty()) {
-                    val totalCost = buyTrades.sumOf { it.first * it.second }
-                    val totalVol = buyTrades.sumOf { it.second }
-                    if (totalVol > 0) totalCost / totalVol else 0.0
-                } else {
-                    0.0
-                }
-
-                val currentPrice = try {
-                    val tickerResult = krakenApiClient.getTicker(TradingPair.fromString(pairSymbol))
-                    tickerResult.getOrNull()?.lastTrade ?: avgEntryPrice
-                } catch (e: Exception) {
-                    avgEntryPrice
-                }
-
-                val totalInvested = amount * avgEntryPrice
-                val currentValue = amount * currentPrice
-                val unrealizedPnL = currentValue - totalInvested
-                val unrealizedPnLPercent = if (totalInvested > 0) (unrealizedPnL / totalInvested) * 100 else 0.0
+                val quantity = pos.quantity
+                val avgEntryPrice = pos.avgEntryPrice
+                val currentPrice = pos.currentPrice
+                val totalInvested = quantity * avgEntryPrice
+                val currentValue = quantity * currentPrice
 
                 val existingPosition = positionDao.getOpenPositionByPair(pairSymbol)
                 if (existingPosition != null) {
                     positionDao.updatePosition(
                         existingPosition.copy(
-                            amount = amount,
+                            amount = quantity,
                             currentPrice = currentPrice,
                             currentValue = currentValue,
-                            unrealizedPnL = unrealizedPnL,
-                            unrealizedPnLPercent = unrealizedPnLPercent,
+                            unrealizedPnL = pos.unrealizedPnL,
+                            unrealizedPnLPercent = pos.unrealizedPnLPercent,
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -642,13 +609,13 @@ class TradingRepository @Inject constructor(
                     positionDao.insertPosition(
                         Position(
                             pair = pairSymbol,
-                            amount = amount,
+                            amount = quantity,
                             averageEntryPrice = avgEntryPrice,
                             currentPrice = currentPrice,
                             totalInvested = totalInvested,
                             currentValue = currentValue,
-                            unrealizedPnL = unrealizedPnL,
-                            unrealizedPnLPercent = unrealizedPnLPercent,
+                            unrealizedPnL = pos.unrealizedPnL,
+                            unrealizedPnLPercent = pos.unrealizedPnLPercent,
                             openedAt = System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis(),
                             isOpen = true,
@@ -658,12 +625,105 @@ class TradingRepository @Inject constructor(
                 }
             }
 
+            // --- Process spot holdings (balance snapshot) ---
+            val heldAssets = mutableMapOf<String, Double>()
+            for ((krakenAsset, amount) in balances) {
+                if (amount <= 0.0) continue
+                val normalized = krakenAsset.normalizeKrakenAsset()
+                val suffix = krakenAsset.krakenAssetSuffix()
+                if (suffix == "HOLD") continue
+
+                val base = krakenToBase[normalized] ?: normalized
+                if (base in configuredBases && base !in activeBases) {
+                    heldAssets[base] = (heldAssets[base] ?: 0.0) + amount
+                }
+            }
+
+            if (heldAssets.isNotEmpty()) {
+                val tradesResult = krakenApiClient.getKrakenTradesHistory()
+                val trades = tradesResult.getOrNull() ?: emptyMap()
+
+                val buyTradesByBase = mutableMapOf<String, MutableList<Pair<Double, Double>>>()
+                for ((_, trade) in trades) {
+                    if (trade.type != "buy") continue
+                    val tradePair = trade.pair
+                    val base = resolveBaseFromKrakenPair(tradePair, krakenToBase) ?: continue
+                    if (base !in heldAssets) continue
+                    val price = trade.price.toDoubleOrNull() ?: continue
+                    val vol = trade.vol.toDoubleOrNull() ?: continue
+                    buyTradesByBase.getOrPut(base) { mutableListOf() }.add(price to vol)
+                }
+
+                for ((base, amount) in heldAssets) {
+                    val pairSymbol = "$base/EUR"
+                    if (pairSymbol !in config.tradingPairs.map { it.uppercase() } &&
+                        pairSymbol !in config.tradingPairs) continue
+                    activeBases.add(base)
+
+                    val buyTrades = buyTradesByBase[base]
+                    val avgEntryPrice = if (!buyTrades.isNullOrEmpty()) {
+                        val totalCost = buyTrades.sumOf { it.first * it.second }
+                        val totalVol = buyTrades.sumOf { it.second }
+                        if (totalVol > 0) totalCost / totalVol else 0.0
+                    } else {
+                        0.0
+                    }
+
+                    val currentPrice = try {
+                        val tickerResult = krakenApiClient.getTicker(TradingPair.fromString(pairSymbol))
+                        tickerResult.getOrNull()?.lastTrade ?: avgEntryPrice
+                    } catch (e: Exception) {
+                        avgEntryPrice
+                    }
+
+                    val totalInvested = amount * avgEntryPrice
+                    val currentValue = amount * currentPrice
+                    val unrealizedPnL = currentValue - totalInvested
+                    val unrealizedPnLPercent = if (totalInvested > 0) (unrealizedPnL / totalInvested) * 100 else 0.0
+
+                    val existingPosition = positionDao.getOpenPositionByPair(pairSymbol)
+                    if (existingPosition != null) {
+                        positionDao.updatePosition(
+                            existingPosition.copy(
+                                amount = amount,
+                                currentPrice = currentPrice,
+                                currentValue = currentValue,
+                                unrealizedPnL = unrealizedPnL,
+                                unrealizedPnLPercent = unrealizedPnLPercent,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    } else {
+                        positionDao.insertPosition(
+                            Position(
+                                pair = pairSymbol,
+                                amount = amount,
+                                averageEntryPrice = avgEntryPrice,
+                                currentPrice = currentPrice,
+                                totalInvested = totalInvested,
+                                currentValue = currentValue,
+                                unrealizedPnL = unrealizedPnL,
+                                unrealizedPnLPercent = unrealizedPnLPercent,
+                                openedAt = System.currentTimeMillis(),
+                                updatedAt = System.currentTimeMillis(),
+                                isOpen = true,
+                                broker = "Kraken"
+                            )
+                        )
+                    }
+                }
+            }
+
+            // --- Close Kraken positions that no longer exist on the exchange ---
+            val localOpenPositions = positionDao.getOpenPositions().first()
             val now = System.currentTimeMillis()
             val minAgeToClose = config.checkIntervalSeconds * 1000L
 
             for (localPos in localOpenPositions) {
+                if (localPos.broker != "Kraken") continue
+
                 val base = TradingPair.fromString(localPos.pair).base
-                if (base !in heldAssets) {
+                if (base !in activeBases) {
                     // Do not close freshly opened positions whose buy order
                     // may not have settled on the exchange yet.
                     if (now - localPos.openedAt < minAgeToClose) continue
@@ -679,7 +739,7 @@ class TradingRepository @Inject constructor(
                 }
             }
 
-            Log.d(TAG, "syncOpenPositions: synced ${heldAssets.size} positions from Kraken")
+            Log.d(TAG, "syncOpenPositions: synced ${activeBases.size} positions from Kraken")
         } catch (e: Exception) {
             Log.e(TAG, "syncOpenPositions failed: ${e.message}", e)
         }

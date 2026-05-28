@@ -5,6 +5,9 @@
 -keepattributes *Annotation*
 -keep class com.uscrooge.app.data.model.** { *; }
 
+# Keep GitHubIssueReporter DTOs for release parsing
+-keep class com.uscrooge.app.integration.GitHubIssueReporter$* { *; }
+
 # Keep Kraken API DTOs for release parsing
 -keep class com.uscrooge.app.data.api.KrakenResponse { *; }
 -keep class com.uscrooge.app.data.api.ServerTime { *; }

@@ -214,10 +214,16 @@ class MarketAnalysisWorker @AssistedInject constructor(
             appendLine("```")
         }
         val result = gitHubIssueReporter.reportError(title, body)
-        result.onSuccess { message ->
-            notificationHelper.sendErrorNotification("GitHub Issue", message)
-        }.onFailure { throwable ->
-            notificationHelper.sendErrorNotification("GitHub Issue Failed", throwable.message ?: "Unknown error")
+        result.onSuccess { issueNumber ->
+            notificationHelper.sendErrorNotification(
+                "GitHub issue created",
+                "Issue #$issueNumber reported successfully"
+            )
+        }.onFailure { err ->
+            notificationHelper.sendErrorNotification(
+                "GitHub issue failed",
+                err.message ?: "Unknown error creating issue"
+            )
         }
     }
 

@@ -129,9 +129,12 @@ class GitHubIssueReporter(
             .build()
 
         val response = client.newCall(request).execute()
-        if (!response.isSuccessful) return null
+        if (!response.isSuccessful) {
+            val errBody = response.body?.string() ?: "No body"
+            throw Exception("GitHub search API error: ${response.code} - $errBody")
+        }
 
-        val json = response.body?.string() ?: return null
+        val json = response.body?.string() ?: throw Exception("Empty response from search API")
         val searchResult = gson.fromJson(json, GitHubSearchResult::class.java)
         return searchResult?.items?.firstOrNull { issue ->
             issue.title.equals(title, ignoreCase = true)

@@ -10,6 +10,7 @@ import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.notification.NotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,7 +26,8 @@ class SignalsViewModel @Inject constructor(
     private val repository: TradingRepository,
     private val configRepository: ConfigRepository,
     private val orderExecutor: OrderExecutor,
-    private val gitHubIssueReporter: GitHubIssueReporter
+    private val gitHubIssueReporter: GitHubIssueReporter,
+    private val notificationHelper: NotificationHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<SignalsUiState>(SignalsUiState.Loading)
@@ -103,10 +105,18 @@ class SignalsViewModel @Inject constructor(
             appendLine("```")
         }
         val result = gitHubIssueReporter.reportError(title, body)
-        result.onSuccess { message ->
-            _executionState.value = ExecutionState.Success(message)
-        }.onFailure { throwable ->
-            _executionState.value = ExecutionState.Error(throwable.message ?: "Failed to report issue to GitHub.")
+        result.onSuccess { issueNumber ->
+            _executionState.value = ExecutionState.Success("GitHub issue #$issueNumber created")
+            notificationHelper.sendErrorNotification(
+                "GitHub issue created",
+                "Issue #$issueNumber reported successfully"
+            )
+        }.onFailure { err ->
+            _executionState.value = ExecutionState.Error(err.message ?: "Failed to report issue to GitHub.")
+            notificationHelper.sendErrorNotification(
+                "GitHub issue failed",
+                err.message ?: "Unknown error creating issue"
+            )
         }
     }
 

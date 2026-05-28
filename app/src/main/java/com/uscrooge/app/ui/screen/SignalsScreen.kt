@@ -405,6 +405,7 @@ fun StatusBadge(status: SignalStatus) {
         SignalStatus.IGNORED -> "Ignored" to Color.Gray
         SignalStatus.FAILED -> "Failed" to Color(0xFFE57373)
         SignalStatus.EXPIRED -> "Expired" to Color.Gray
+        SignalStatus.MISSED -> "Missed" to Color(0xFF9E9E9E)
     }
 
     Surface(

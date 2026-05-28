@@ -85,7 +85,14 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 reportToGitHub("Alpaca position sync failed", e)
             }
 
-            // --- STEP 2: Check circuit breaker before new analysis/trading ---
+            // --- STEP 2: Validate pending trading signals ---
+            try {
+                repository.validatePendingSignals(config)
+            } catch (e: Exception) {
+                Log.w("MarketAnalysisWorker", "Signal validation failed: ${e.message}")
+            }
+
+            // --- STEP 3: Check circuit breaker before new analysis/trading ---
             val blocked = circuitBreaker.checkTradingAllowed(config)
             if (blocked != null) {
                 Log.w("MarketAnalysisWorker", "Trading blocked: $blocked")
@@ -100,7 +107,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 return Result.success()
             }
 
-            // --- STEP 3: Analyze all trading pairs ---
+            // --- STEP 4: Analyze all trading pairs ---
             val signals = repository.analyzeAllPairs(config)
 
             // Notify analysis errors
@@ -132,7 +139,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 }
             }
 
-            // --- STEP 4: Execute signals if automatic trading is enabled ---
+            // --- STEP 5: Execute signals if automatic trading is enabled ---
             if (config.automaticTrading) {
                 for (signal in signals) {
                     // Re-check circuit breaker before each trade

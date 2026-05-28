@@ -80,6 +80,12 @@ class TradingRepository @Inject constructor(
     fun getPendingSignals(): Flow<List<TradingSignal>> =
         signalDao.getSignalsByStatus(SignalStatus.PENDING)
 
+    suspend fun getPendingSignalsList(): List<TradingSignal> =
+        signalDao.getSignalsByStatusList(SignalStatus.PENDING)
+
+    suspend fun getPendingSignalByPair(pair: String): TradingSignal? =
+        signalDao.getPendingSignalByPair(pair, SignalStatus.PENDING)
+
     suspend fun getSignalById(id: Long): TradingSignal? = signalDao.getSignalById(id)
 
     suspend fun insertSignal(signal: TradingSignal): Long = signalDao.insertSignal(signal)
@@ -292,7 +298,27 @@ class TradingRepository @Inject constructor(
                 higherTimeframeTrends = higherTimeframeTrends
             )
 
-            signalResult.signal?.let { insertSignal(it) }
+            signalResult.signal?.let { newSignal ->
+                val existingPending = getPendingSignalByPair(pair)
+                if (existingPending != null) {
+                    updateSignal(
+                        existingPending.copy(
+                            type = newSignal.type,
+                            strength = newSignal.strength,
+                            currentPrice = newSignal.currentPrice,
+                            suggestedPrice = newSignal.suggestedPrice,
+                            stopLoss = newSignal.stopLoss,
+                            takeProfit = newSignal.takeProfit,
+                            suggestedAmount = newSignal.suggestedAmount,
+                            riskRewardRatio = newSignal.riskRewardRatio,
+                            timestamp = System.currentTimeMillis(),
+                            reasons = newSignal.reasons
+                        )
+                    )
+                } else {
+                    insertSignal(newSignal)
+                }
+            }
 
             Result.success(signalResult)
         } catch (e: Exception) {
@@ -754,5 +780,73 @@ class TradingRepository @Inject constructor(
     suspend fun cleanupOldData() {
         val cutoffTime = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
         signalDao.deleteOldSignals(cutoffTime)
+    }
+
+    suspend fun validatePendingSignals(config: TradingConfig) {
+        val pendingSignals = getPendingSignalsList()
+        if (pendingSignals.isEmpty()) return
+
+        val openPositions = positionDao.getOpenPositions().first()
+        val availableBalance = getPortfolio(config).availableBalance
+
+        for (signal in pendingSignals) {
+            try {
+                val tradingPair = TradingPair.fromString(signal.pair)
+                val broker = getBrokerForPair(config, signal.pair)
+                    ?: continue
+
+                val ohlcResult = getOHLC(tradingPair, config.primaryTimeframe, broker)
+                if (ohlcResult.isFailure) continue
+
+                val ohlcData = ohlcResult.getOrNull()!!
+                if (ohlcData.size < 50) {
+                    markSignalAsMissed(signal)
+                    continue
+                }
+
+                val tickerResult = getTicker(tradingPair, broker)
+                if (tickerResult.isFailure) {
+                    markSignalAsMissed(signal)
+                    continue
+                }
+
+                val currentPrice = tickerResult.getOrNull()!!.lastTrade
+
+                val result = strategy.generateSignal(
+                    pair = signal.pair,
+                    ohlcData = ohlcData,
+                    currentPrice = currentPrice,
+                    currentPositions = openPositions,
+                    availableBalance = availableBalance
+                )
+
+                val newSignal = result.signal
+                if (newSignal != null && newSignal.type == signal.type && newSignal.strength >= config.minSignalStrength) {
+                    updateSignal(
+                        signal.copy(
+                            strength = newSignal.strength,
+                            currentPrice = newSignal.currentPrice,
+                            suggestedPrice = newSignal.suggestedPrice,
+                            stopLoss = newSignal.stopLoss,
+                            takeProfit = newSignal.takeProfit,
+                            suggestedAmount = newSignal.suggestedAmount,
+                            riskRewardRatio = newSignal.riskRewardRatio,
+                            timestamp = System.currentTimeMillis(),
+                            reasons = newSignal.reasons
+                        )
+                    )
+                    Log.d(TAG, "Updated pending signal ${signal.id} for ${signal.pair} - still valid")
+                } else {
+                    markSignalAsMissed(signal)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error validating signal ${signal.id} for ${signal.pair}: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun markSignalAsMissed(signal: TradingSignal) {
+        updateSignal(signal.copy(status = SignalStatus.MISSED))
+        Log.d(TAG, "Signal ${signal.id} for ${signal.pair} marked as MISSED")
     }
 }

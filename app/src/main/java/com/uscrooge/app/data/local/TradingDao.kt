@@ -12,6 +12,12 @@ interface TradingSignalDao {
     @Query("SELECT * FROM trading_signals WHERE status = :status ORDER BY timestamp DESC")
     fun getSignalsByStatus(status: SignalStatus): Flow<List<TradingSignal>>
 
+    @Query("SELECT * FROM trading_signals WHERE status = :status ORDER BY timestamp DESC")
+    suspend fun getSignalsByStatusList(status: SignalStatus): List<TradingSignal>
+
+    @Query("SELECT * FROM trading_signals WHERE pair = :pair AND status = :status ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getPendingSignalByPair(pair: String, status: SignalStatus): TradingSignal?
+
     @Query("SELECT * FROM trading_signals WHERE id = :id")
     suspend fun getSignalById(id: Long): TradingSignal?
 

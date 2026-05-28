@@ -44,7 +44,8 @@ enum class SignalStatus {
     EXECUTED,       // Order successfully executed
     IGNORED,        // User ignored the signal
     FAILED,         // Order execution failed
-    EXPIRED         // Signal too old
+    EXPIRED,        // Signal too old (time-based expiry)
+    MISSED          // Signal no longer valid (missed opportunity)
 }
 
 data class SignalStrength(

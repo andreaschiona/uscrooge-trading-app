@@ -1,38 +1,34 @@
 {
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "AGENTS.md"
-  ],
-  "skills": {
-    "paths": [
-      ".opencode/skills"
-    ]
-  },
-  "permission": {
-    "bash": "allow"
-  },
-  "compaction": {
-    "auto": true,
-    "tail_turns": 10
-  },
-  "tool_output": {
-    "max_lines": 150,
-    "max_bytes": 6144
-  },
-  "provider": {
-    "opencode": {
-      "options": {
-        "timeout": 300000,
-        "chunkTimeout": 60000
-      }
-    },
-    "google": {
-      "options": {
-        "apiKey": "{env:GEMINI_API_KEY}",
-        "timeout": 300000,
-        "chunkTimeout": 60000
-      }
-    }
-  },
-  "model": "google/gemini-2.5-flash"
+	"$schema": "https://opencode.ai/config.json",
+	"instructions": ["AGENTS.md"],
+	"skills": {
+		"paths": [".opencode/skills"]
+	},
+	"permission": {
+		"bash": "allow"
+	},
+	"compaction": {
+		"auto": true,
+		"tail_turns": 10
+	},
+	"tool_output": {
+		"max_lines": 150,
+		"max_bytes": 6144
+	},
+	"provider": {
+		"opencode": {
+			"options": {
+				"timeout": 300000,
+				"chunkTimeout": 60000
+			}
+		},
+		"google": {
+			"options": {
+				"apiKey": "{env:GEMINI_API_KEY}",
+				"timeout": 300000,
+				"chunkTimeout": 60000
+			}
+		}
+	},
+	"model": "google/gemini-2.5-flash"
 }

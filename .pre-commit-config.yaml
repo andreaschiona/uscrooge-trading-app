@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/smallrye/pre-commit-hooks
+    rev: v1.0.2
+    hooks:
+      - id: ktlint
+        args: ["--android", "--color"]
+
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: remove-crlf
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-xml
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  - repo: local
+    hooks:
+      - id: gradle-wrapper-validation
+        name: Gradle Wrapper Validation
+        entry: bash -c './gradlew.bat --version > /dev/null 2>&1 || ./gradlew --version > /dev/null 2>&1'
+        language: system
+        pass_filenames: false
+        always_run: true

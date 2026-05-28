@@ -11,6 +11,7 @@ import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.strategy.ExitSignal
 import com.uscrooge.app.strategy.ExitUrgency
 import com.uscrooge.app.strategy.TradingStrategy
@@ -35,7 +36,8 @@ class OrderExecutor @Inject constructor(
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
-    private val circuitBreaker: CircuitBreaker
+    private val circuitBreaker: CircuitBreaker,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) {
 
     @Volatile
@@ -464,6 +466,8 @@ class OrderExecutor @Inject constructor(
 
         positionDao.updatePosition(closedPosition)
 
+        reportPositionFeedback(closedPosition, "Sell signal: ${signal.getReasonsList().joinToString(", ")}", config)
+
         signalDao.updateSignal(
             signal.copy(
                 status = SignalStatus.EXECUTED,
@@ -602,6 +606,8 @@ class OrderExecutor @Inject constructor(
 
         positionDao.updatePosition(closedPosition)
 
+        reportPositionFeedback(closedPosition, "Exit condition: ${exitSignal.reason}", config)
+
         Log.i(TAG, "Exit order executed for ${position.pair}: ${exitSignal.reason}, PnL: $realizedPnL")
 
         return Result.success(order)
@@ -733,6 +739,28 @@ class OrderExecutor @Inject constructor(
         val fee: Double,
         val fillTime: Long
     )
+
+    private suspend fun reportPositionFeedback(
+        closedPosition: Position,
+        exitReason: String?,
+        currentConfig: TradingConfig
+    ) {
+        try {
+            val buyOrder = orderDao.getLastBuyOrderByPair(closedPosition.pair)
+            val openingSignal = buyOrder?.signalId?.let { signalId ->
+                signalDao.getSignalById(signalId)
+            }
+
+            gitHubIssueReporter.reportPositionFeedback(
+                position = closedPosition,
+                openingSignal = openingSignal,
+                exitReason = exitReason,
+                config = currentConfig
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to report position feedback for ${closedPosition.pair}", e)
+        }
+    }
 
     suspend fun updatePositionPrices() {
         val positions = positionDao.getOpenPositions().first()

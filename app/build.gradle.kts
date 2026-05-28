@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -39,8 +41,6 @@ tasks.register("jacocoTestReport", JacocoReport::class) {
         include("**/*.exec", "**/*.ec")
     })
 }
-
-import java.util.Properties
 
 val appVersionMajor: String by project
 val appVersionMinor: String by project

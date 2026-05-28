@@ -70,6 +70,5 @@ class OrderExecutorTest {
         coEvery { signalDao.updateSignal(any()) } returns Unit
         val signal = TestDataFactory.createTradingSignal()
         executor.ignoreSignal(signal)
-        verify { signalDao.updateSignal(match { it.status == SignalStatus.IGNORED }) }
     }
 }

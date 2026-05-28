@@ -231,16 +231,12 @@ class TradingRepository @Inject constructor(
             )
         }
 
-        // c/v/n from TradeBalance are margin-position fields: always "0" for spot traders.
-        // Use them only when > 0 (margin trading), otherwise fall back to locally-computed values.
-        val krakenTotalInvested = tradeBalance?.c?.toDoubleOrNull()?.takeIf { it > 0.0 }
-        val krakenCurrentValue = tradeBalance?.v?.toDoubleOrNull()?.takeIf { it > 0.0 }
-        val krakenTotalPnL = tradeBalance?.n?.toDoubleOrNull()
-
-        val totalInvested = krakenTotalInvested ?: localTotalInvested
-        val currentValue = krakenCurrentValue ?: localCurrentValue
-        val totalPnL = if (krakenTotalInvested != null && krakenTotalPnL != null) krakenTotalPnL
-                       else (currentValue - totalInvested)
+        // Compute totals from all locally-stored positions (Kraken + Alpaca).
+        // TradeBalance fields c/v/n reflect only Kraken margin positions and would
+        // exclude Alpaca data, so we always prefer the local position sums.
+        val totalInvested = localTotalInvested
+        val currentValue = localCurrentValue
+        val totalPnL = currentValue - totalInvested
         val totalPnLPercent = if (totalInvested > 0) (totalPnL / totalInvested) * 100 else 0.0
 
         return Portfolio(

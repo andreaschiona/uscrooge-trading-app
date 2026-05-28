@@ -29,7 +29,7 @@ jobs:
           # Importante: persist-credentials deve essere true (default) per consentire il push successivo
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17

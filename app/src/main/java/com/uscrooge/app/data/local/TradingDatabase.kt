@@ -141,7 +141,7 @@ abstract class TradingDatabase : RoomDatabase() {
                     "uscrooge_database"
                 )
                     .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-                    .fallbackToDestructiveMigrationFrom(1)
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

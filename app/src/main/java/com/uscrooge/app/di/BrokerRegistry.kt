@@ -1,6 +1,7 @@
 package com.uscrooge.app.di
 
 import android.util.Log
+import com.google.gson.Gson
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.BrokerApi
 import com.uscrooge.app.data.api.KrakenApiClient
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,20 +31,26 @@ import javax.inject.Singleton
 @Singleton
 class BrokerRegistry @Inject constructor(
     private val configRepository: ConfigRepository,
-    private val gitHubIssueReporter: GitHubIssueReporter
+    private val gitHubIssueReporter: GitHubIssueReporter,
+    private val gson: Gson? = null,
+    private val okHttpClient: OkHttpClient? = null
 ) {
 
     val krakenApiClient: KrakenApiClient = KrakenApiClient(
         apiKey = "",
         apiSecret = "",
-        timeout = 30_000L
+        timeout = 30_000L,
+        sharedGson = gson,
+        sharedOkHttp = okHttpClient
     )
 
     val alpacaApiClient: AlpacaApiClient = AlpacaApiClient(
         apiKey = "",
         apiSecret = "",
         isPaperTrading = true,
-        timeout = 30_000L
+        timeout = 30_000L,
+        sharedGson = gson,
+        sharedOkHttp = okHttpClient
     )
 
     /**

@@ -1,6 +1,7 @@
 package com.uscrooge.app.di
 
 import android.content.Context
+import com.google.gson.Gson
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
@@ -17,13 +18,14 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
-/**
- * Marker for the application-lifetime coroutine scope used by long-running
- * collectors such as [BrokerRegistry.start].
- */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ApplicationScope
@@ -37,6 +39,28 @@ object AppModule {
     @ApplicationScope
     fun provideApplicationScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(): OkHttpClient {
+        val loggingLevel = if (android.util.Log.isLoggable("OkHttp", android.util.Log.DEBUG)) {
+            HttpLoggingInterceptor.Level.BODY
+        } else {
+            HttpLoggingInterceptor.Level.BASIC
+        }
+        return OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectionPool(ConnectionPool(5, 30, TimeUnit.SECONDS))
+            .dispatcher(Dispatcher().apply { maxRequests = 10; maxRequestsPerHost = 5 })
+            .addInterceptor(HttpLoggingInterceptor().apply { level = loggingLevel })
+            .build()
+    }
 
     @Provides
     @Singleton

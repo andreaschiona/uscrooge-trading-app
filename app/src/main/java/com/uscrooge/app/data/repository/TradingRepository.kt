@@ -16,6 +16,8 @@ import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,7 +35,8 @@ class TradingRepository @Inject constructor(
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
-    private val strategy: TradingStrategy
+    private val strategy: TradingStrategy,
+    private val gson: Gson
 ) {
     companion object {
         private const val TAG = "TradingRepository"
@@ -42,9 +45,13 @@ class TradingRepository @Inject constructor(
         private const val KEY_LAST_LOG = "last_analysis_log"
     }
 
-    private val gson = Gson()
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val technicalAnalyzer = TechnicalAnalyzer()
+
+    // In-memory OHLC cache with TTL
+    private data class OhlcCacheEntry(val data: List<OHLC>, val cachedAt: Long)
+    private val ohlcCache = mutableMapOf<String, OhlcCacheEntry>()
+    private val ohlcCacheTtlMs = 60_000L // 1 minute
 
     private val _lastAnalysisLog = MutableStateFlow<AnalysisLog?>(null)
     val lastAnalysisLog: StateFlow<AnalysisLog?> = _lastAnalysisLog.asStateFlow()
@@ -119,8 +126,19 @@ class TradingRepository @Inject constructor(
     }
 
     suspend fun getOHLC(pair: TradingPair, interval: Int = 60, broker: BrokerApi? = null): Result<List<OHLC>> {
+        val cacheKey = "${pair.symbol}_$interval"
+        val now = System.currentTimeMillis()
+        ohlcCache[cacheKey]?.let { entry ->
+            if (now - entry.cachedAt < ohlcCacheTtlMs) {
+                return Result.success(entry.data)
+            }
+        }
         val activeBroker = broker ?: if (isCryptoPair(pair.symbol)) krakenApiClient else alpacaApiClient
-        return activeBroker.getOHLC(pair.symbol, interval)
+        val result = activeBroker.getOHLC(pair.symbol, interval)
+        if (result.isSuccess) {
+            ohlcCache[cacheKey] = OhlcCacheEntry(result.getOrNull()!!, now)
+        }
+        return result
     }
 
     suspend fun getMultiTimeframeOHLC(
@@ -134,19 +152,24 @@ class TradingRepository @Inject constructor(
                 config.tertiaryTimeframe
             )
 
-            val results = mutableMapOf<Int, List<OHLC>>()
-
-            for (timeframe in timeframes) {
-                val result = getOHLC(pair, timeframe)
-                if (result.isSuccess) {
-                    results[timeframe] = result.getOrNull()!!
+            coroutineScope {
+                val deferred = timeframes.map { timeframe ->
+                    async {
+                        timeframe to getOHLC(pair, timeframe)
+                    }
                 }
-            }
-
-            if (results.isEmpty()) {
-                Result.failure(Exception("Failed to fetch any timeframe data"))
-            } else {
-                Result.success(results)
+                val results = mutableMapOf<Int, List<OHLC>>()
+                deferred.forEach { deferredResult ->
+                    val (timeframe, result) = deferredResult.await()
+                    if (result.isSuccess) {
+                        results[timeframe] = result.getOrNull()!!
+                    }
+                }
+                if (results.isEmpty()) {
+                    Result.failure(Exception("Failed to fetch any timeframe data"))
+                } else {
+                    Result.success(results)
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -154,7 +177,7 @@ class TradingRepository @Inject constructor(
     }
 
     // Portfolio
-    suspend fun getPortfolio(config: TradingConfig? = null): Portfolio {
+    suspend fun getPortfolio(config: TradingConfig? = null): Portfolio = coroutineScope {
         config?.let {
             krakenApiClient.updateCredentials(
                 apiKey = it.krakenApiKey,
@@ -172,8 +195,11 @@ class TradingRepository @Inject constructor(
         val localTotalInvested = positions.sumOf { it.totalInvested }
         val localCurrentValue = positions.sumOf { it.currentValue }
 
-        // Get Kraken balances
-        val krakenBalanceResult = krakenApiClient.getAccountBalance()
+        // Fetch balances concurrently
+        val krakenBalanceDeferred = async { krakenApiClient.getAccountBalance() }
+        val tradeBalanceDeferred = async { krakenApiClient.getTradeBalance("ZEUR") }
+
+        val krakenBalanceResult = krakenBalanceDeferred.await()
         val krakenBalances = krakenBalanceResult.getOrNull().orEmpty()
         val availableFromKrakenBalance = krakenBalances.entries
             .filter { (asset, _) ->
@@ -187,8 +213,7 @@ class TradingRepository @Inject constructor(
             Log.w(TAG, "Kraken Balance call failed: ${error.message}")
         }
 
-        val tradeBalanceResult = krakenApiClient.getTradeBalance("ZEUR")
-        val tradeBalance = tradeBalanceResult.getOrNull()
+        val tradeBalance = tradeBalanceDeferred.await().getOrNull()
         val availableFromTradeBalance = tradeBalance?.mf?.toDoubleOrNull()
             ?: tradeBalance?.tb?.toDoubleOrNull()
 
@@ -203,11 +228,7 @@ class TradingRepository @Inject constructor(
             else -> "None"
         }
 
-        tradeBalanceResult.exceptionOrNull()?.let { error ->
-            Log.w(TAG, "Kraken TradeBalance call failed: ${error.message}")
-        }
-
-        // Get Alpaca buying power if enabled
+        // Get Alpaca buying power if enabled (concurrently with Kraken calls)
         val alpacaEnabled = config?.enableStockTrading == true && config.alpacaApiKey.isNotBlank()
         if (alpacaEnabled) {
             val alpacaBalanceResult = alpacaApiClient.getAvailableBalance("USD")
@@ -232,14 +253,12 @@ class TradingRepository @Inject constructor(
         }
 
         // Compute totals from all locally-stored positions (Kraken + Alpaca).
-        // TradeBalance fields c/v/n reflect only Kraken margin positions and would
-        // exclude Alpaca data, so we always prefer the local position sums.
         val totalInvested = localTotalInvested
         val currentValue = localCurrentValue
         val totalPnL = currentValue - totalInvested
         val totalPnLPercent = if (totalInvested > 0) (totalPnL / totalInvested) * 100 else 0.0
 
-        return Portfolio(
+        Portfolio(
             totalInvested = totalInvested,
             currentValue = currentValue,
             totalPnL = totalPnL,

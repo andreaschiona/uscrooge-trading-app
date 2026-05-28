@@ -57,6 +57,32 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        try {
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trading_signals_pair ON trading_signals(pair)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trading_signals_status ON trading_signals(status)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trading_signals_timestamp ON trading_signals(timestamp)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trading_signals_pair_status ON trading_signals(pair, status)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_positions_pair ON positions(pair)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_positions_isOpen ON positions(isOpen)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_positions_broker ON positions(broker)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_positions_pair_isOpen ON positions(pair, isOpen)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_orders_pair ON orders(pair)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_orders_createdAt ON orders(createdAt)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_orders_pair_status ON orders(pair, status)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trade_journal_pair ON trade_journal(pair)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trade_journal_exitTime ON trade_journal(exitTime)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_trade_journal_pair_exitTime ON trade_journal(pair, exitTime)")
+            Log.i(TAG, "Migration 4->5 completed: added database indices")
+        } catch (e: Exception) {
+            Log.e(TAG, "Migration 4->5 failed", e)
+            throw e
+        }
+    }
+}
+
 @Database(
     entities = [
         TradingSignal::class,
@@ -64,7 +90,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         Position::class,
         TradeJournalEntry::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {
@@ -85,7 +111,7 @@ abstract class TradingDatabase : RoomDatabase() {
                     TradingDatabase::class.java,
                     "uscrooge_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigrationFrom(1)
                     .build()
                 INSTANCE = instance

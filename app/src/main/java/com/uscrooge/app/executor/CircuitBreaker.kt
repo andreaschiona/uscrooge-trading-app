@@ -20,12 +20,10 @@ import javax.inject.Singleton
  * Once tripped, trading is halted for a configurable cooldown period.
  */
 @Singleton
-class CircuitBreaker
-    @Inject
-    constructor(
-        private val orderDao: OrderDao,
-        private val positionDao: PositionDao,
-    ) {
+class CircuitBreaker @Inject constructor(
+    private val orderDao: OrderDao,
+    private val positionDao: PositionDao
+) {
     companion object {
         private const val TAG = "CircuitBreaker"
     }

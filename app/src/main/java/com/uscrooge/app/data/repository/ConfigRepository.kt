@@ -70,6 +70,7 @@ class ConfigRepository(private val context: Context) {
         private val MAX_DAILY_DRAWDOWN_PERCENT = doublePreferencesKey("max_daily_drawdown_percent")
         private val MAX_CONSECUTIVE_FAILURES = intPreferencesKey("max_consecutive_failures")
         private val CIRCUIT_BREAKER_COOLDOWN_MINUTES = intPreferencesKey("circuit_breaker_cooldown_minutes")
+        private val USE_DARK_MODE = booleanPreferencesKey("use_dark_mode")
         private val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
@@ -107,6 +108,7 @@ class ConfigRepository(private val context: Context) {
                 apiTimeout = preferences[API_TIMEOUT] ?: 30000,
                 alpacaApiKey = decryptApiKey(preferences[ALPACA_API_KEY] ?: ""),
                 alpacaApiSecret = decryptApiSecret(preferences[ALPACA_API_SECRET] ?: ""),
+                useDarkMode = preferences[USE_DARK_MODE] ?: false,
                 alpacaPaperTrading = preferences[ALPACA_PAPER_TRADING] ?: true,
                 stockTradingPairs = preferences[STOCK_TRADING_PAIRS]?.split(",")
                     ?.filter { it.isNotBlank() }
@@ -157,6 +159,7 @@ class ConfigRepository(private val context: Context) {
             preferences[API_TIMEOUT] = config.apiTimeout
             preferences[ALPACA_API_KEY] = encryptApiKey(config.alpacaApiKey)
             preferences[ALPACA_API_SECRET] = encryptApiSecret(config.alpacaApiSecret)
+            preferences[USE_DARK_MODE] = config.useDarkMode
             preferences[ALPACA_PAPER_TRADING] = config.alpacaPaperTrading
             preferences[STOCK_TRADING_PAIRS] = config.stockTradingPairs.joinToString(",")
             preferences[ENABLE_STOCK_TRADING] = config.enableStockTrading

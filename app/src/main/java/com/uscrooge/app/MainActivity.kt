@@ -22,14 +22,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.ui.screen.DashboardScreen
 import com.uscrooge.app.ui.screen.SettingsScreen
 import com.uscrooge.app.ui.screen.SignalsScreen
+import com.uscrooge.app.ui.screen.TradeJournalScreen
 import com.uscrooge.app.ui.theme.UScroogeAppTheme
 import com.uscrooge.app.ui.viewmodel.DashboardViewModel
 import com.uscrooge.app.ui.viewmodel.SettingsViewModel
 import com.uscrooge.app.ui.viewmodel.SignalsViewModel
+import com.uscrooge.app.ui.viewmodel.TradeJournalViewModel
 import com.uscrooge.app.worker.MarketAnalysisWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -69,8 +72,9 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            UScroogeAppTheme {
-                MainScreen()
+            val config by configRepository.configFlow.collectAsState(initial = TradingConfig())
+            UScroogeAppTheme(darkTheme = config.useDarkMode) {
+                MainScreen(configRepository = configRepository)
             }
         }
     }
@@ -86,7 +90,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(configRepository: ConfigRepository) {
     val navController = rememberNavController()
 
     Scaffold(
@@ -98,6 +102,7 @@ fun MainScreen() {
                 listOf(
                     Screen.Dashboard,
                     Screen.Signals,
+                    Screen.TradeJournal,
                     Screen.Settings
                 ).forEach { screen ->
                     NavigationBarItem(
@@ -137,6 +142,11 @@ fun MainScreen() {
                 val viewModel: SettingsViewModel = hiltViewModel()
                 SettingsScreen(viewModel)
             }
+
+            composable(Screen.TradeJournal.route) {
+                val viewModel: TradeJournalViewModel = hiltViewModel()
+                TradeJournalScreen(viewModel)
+            }
         }
     }
 }
@@ -144,5 +154,6 @@ fun MainScreen() {
 sealed class Screen(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Home)
     object Signals : Screen("signals", "Signals", Icons.Default.Notifications)
+    object TradeJournal : Screen("trade_journal", "Journal", Icons.Default.DateRange)
     object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }

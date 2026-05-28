@@ -334,6 +334,11 @@ class AlpacaApiClient(
 
             if (response.isSuccessful && response.body() != null) {
                 val trade = response.body()!!.trade
+                if (trade == null) {
+                    val errorMsg = "no trade data for $normalizedSymbol"
+                    Log.w(TAG, "getTicker failed for $symbol: $errorMsg")
+                    return Result.failure(Exception("Alpaca ticker error: $errorMsg"))
+                }
                 val quoteResponse = getDataApiService().getLatestQuote(normalizedSymbol)
                 val quote = if (quoteResponse.isSuccessful) quoteResponse.body()?.quote else null
 
@@ -362,7 +367,8 @@ class AlpacaApiClient(
             }
         } catch (e: Exception) {
             Log.e(TAG, "getTicker exception for $symbol: ${e.message}", e)
-            Result.failure(Exception("Alpaca ticker error: ${e.message}"))
+            val errorMsg = e.message ?: "${e.javaClass.simpleName}: null"
+            Result.failure(Exception("Alpaca ticker error: $errorMsg"))
         }
     }
 
@@ -410,7 +416,8 @@ class AlpacaApiClient(
             }
         } catch (e: Exception) {
             Log.e(TAG, "getOHLC exception for $symbol: ${e.message}", e)
-            Result.failure(Exception("Alpaca OHLC error: ${e.message}"))
+            val errorMsg = e.message ?: "${e.javaClass.simpleName}: null"
+            Result.failure(Exception("Alpaca OHLC error: $errorMsg"))
         }
     }
 
@@ -446,7 +453,8 @@ class AlpacaApiClient(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Daily fallback exception for $symbol: ${e.message}")
-            Result.failure(Exception("Daily fallback error: ${e.message}"))
+            val errorMsg = e.message ?: "${e.javaClass.simpleName}: null"
+            Result.failure(Exception("Daily fallback error: $errorMsg"))
         }
     }
 

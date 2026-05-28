@@ -5,6 +5,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -39,6 +40,9 @@ class KrakenApiClient(
 
     @Volatile
     private var cachedPairsTime: Long = 0L
+
+    @Volatile
+    private var cachedPairDecimals: Map<String, Int> = emptyMap()
 
     companion object {
         private const val PAIRS_CACHE_MS = 60 * 60 * 1000L // 1 hour
@@ -397,6 +401,26 @@ class KrakenApiClient(
         }
     }
 
+    private suspend fun getPairDecimals(krakenSymbol: String): Int {
+        cachedPairDecimals[krakenSymbol]?.let { return it }
+        return try {
+            val response = getApiService().getAssetPairs(pair = krakenSymbol)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isEmpty() && body.result != null) {
+                    val info = body.result.values.firstOrNull()
+                    if (info != null) {
+                        cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
+                        return info.pair_decimals
+                    }
+                }
+            }
+            2
+        } catch (e: Exception) {
+            2
+        }
+    }
+
     suspend fun addOrder(
         pair: TradingPair,
         type: OrderSide,
@@ -408,6 +432,10 @@ class KrakenApiClient(
         return try {
             val nonce = nextNonce()
             val krakenPair = pair.toKrakenSymbol()
+            val formattedPrice = price?.let {
+                val decimals = getPairDecimals(krakenPair)
+                String.format(Locale.US, "%.${decimals}f", it)
+            }
 
             val response = getApiService().addOrder(
                 nonce = nonce,
@@ -415,7 +443,7 @@ class KrakenApiClient(
                 type = type.name.lowercase(),
                 volume = volume.toString(),
                 pair = krakenPair,
-                price = price?.toString(),
+                price = formattedPrice,
                 validate = validate
             )
 

@@ -5,6 +5,7 @@ import com.uscrooge.app.data.model.*
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import kotlin.math.sin
 
 class TechnicalAnalyzerParametricTest {
 

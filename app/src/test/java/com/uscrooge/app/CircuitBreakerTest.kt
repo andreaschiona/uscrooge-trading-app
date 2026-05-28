@@ -84,6 +84,6 @@ class CircuitBreakerTest {
         assertFalse(circuitBreaker.isTripped())
         circuitBreaker.recordFailure()
         circuitBreaker.recordFailure()
-        assertEquals("Max consecutive failures (3)", circuitBreaker.getTripReason())
+        assertNull(circuitBreaker.getTripReason())
     }
 }

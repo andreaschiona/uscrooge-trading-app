@@ -1,7 +1,9 @@
 package com.uscrooge.app.ui.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
@@ -12,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.net.ConnectException
 import java.net.SocketTimeoutException
@@ -21,6 +24,7 @@ import javax.net.ssl.SSLException
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val configRepository: ConfigRepository,
     private val gitHubIssueReporter: GitHubIssueReporter
 ) : ViewModel() {
@@ -117,6 +121,10 @@ class SettingsViewModel @Inject constructor(
 
                 configRepository.updateConfig(normalizedConfig)
                 gitHubIssueReporter.configureToken(normalizedConfig.githubToken)
+
+                val intervalMinutes = (normalizedConfig.checkIntervalSeconds / 60).toLong()
+                MarketAnalysisWorker.schedule(context, intervalMinutes)
+
                 _saveState.value = SaveState.Success("Settings saved successfully")
 
                 // Reset state after 2 seconds
@@ -346,6 +354,11 @@ class SettingsViewModel @Inject constructor(
             try {
                 _saveState.value = SaveState.Saving
                 configRepository.resetToDefaults()
+
+                val defaultConfig = configRepository.configFlow.first()
+                val intervalMinutes = (defaultConfig.checkIntervalSeconds / 60).toLong()
+                MarketAnalysisWorker.schedule(context, intervalMinutes)
+
                 _saveState.value = SaveState.Success("Settings reset to defaults")
 
                 kotlinx.coroutines.delay(2000)

@@ -192,7 +192,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     // SQLite for migrations
-    implementation("androidx.sqlite:sqlite-ktx:2.4.0")
+    implementation("androidx.sqlite:sqlite-ktx:2.6.2")
 
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")

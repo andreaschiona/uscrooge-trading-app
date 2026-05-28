@@ -136,6 +136,12 @@ android {
         buildConfig = true
     }
 
+    testOptions {
+        unitTests {
+            returnDefaultValues = true
+        }
+    }
+
     lint {
         abortOnError = false
     }

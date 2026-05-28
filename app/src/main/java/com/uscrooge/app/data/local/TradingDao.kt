@@ -135,3 +135,27 @@ data class PairTradeStats(
     val tradeCount: Int,
     val avgPnLPercent: Double
 )
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM audit_log ORDER BY timestamp DESC")
+    fun getAllEntries(): Flow<List<AuditLogEntry>>
+
+    @Query("SELECT * FROM audit_log WHERE category = :category ORDER BY timestamp DESC")
+    fun getEntriesByCategory(category: String): Flow<List<AuditLogEntry>>
+
+    @Query("SELECT * FROM audit_log WHERE severity = :severity ORDER BY timestamp DESC")
+    fun getEntriesBySeverity(severity: String): Flow<List<AuditLogEntry>>
+
+    @Query("SELECT * FROM audit_log WHERE timestamp >= :sinceTimestamp ORDER BY timestamp DESC")
+    fun getEntriesSince(sinceTimestamp: Long): Flow<List<AuditLogEntry>>
+
+    @Insert
+    suspend fun insertEntry(entry: AuditLogEntry): Long
+
+    @Query("DELETE FROM audit_log WHERE timestamp < :cutoffTime")
+    suspend fun deleteOldEntries(cutoffTime: Long)
+
+    @Query("SELECT COUNT(*) FROM audit_log WHERE timestamp >= :sinceTimestamp")
+    suspend fun getEntryCountSince(sinceTimestamp: Long): Int
+}

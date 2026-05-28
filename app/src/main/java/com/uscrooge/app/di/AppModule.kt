@@ -3,6 +3,7 @@ package com.uscrooge.app.di
 import android.content.Context
 import com.google.gson.Gson
 import com.uscrooge.app.analysis.TechnicalAnalyzer
+import com.uscrooge.app.data.local.AuditLogDao
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradeJournalDao
@@ -100,4 +101,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTradeJournalDao(db: TradingDatabase): TradeJournalDao = db.tradeJournalDao()
+
+    @Provides
+    fun provideAuditLogDao(db: TradingDatabase): AuditLogDao = db.auditLogDao()
 }

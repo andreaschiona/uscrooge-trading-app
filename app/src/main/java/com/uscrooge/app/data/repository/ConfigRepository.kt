@@ -127,7 +127,7 @@ class ConfigRepository(private val context: Context) {
                 maxDailyDrawdownPercent = preferences[MAX_DAILY_DRAWDOWN_PERCENT] ?: 5.0,
                 maxConsecutiveFailures = preferences[MAX_CONSECUTIVE_FAILURES] ?: 3,
                 circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60,
-                githubToken = preferences[GITHUB_TOKEN] ?: ""
+                githubToken = decryptApiKey(preferences[GITHUB_TOKEN] ?: "")
             )
         }
 
@@ -175,7 +175,7 @@ class ConfigRepository(private val context: Context) {
             preferences[MAX_DAILY_DRAWDOWN_PERCENT] = config.maxDailyDrawdownPercent
             preferences[MAX_CONSECUTIVE_FAILURES] = config.maxConsecutiveFailures
             preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] = config.circuitBreakerCooldownMinutes
-            preferences[GITHUB_TOKEN] = config.githubToken
+            preferences[GITHUB_TOKEN] = encryptApiKey(config.githubToken)
         }
     }
 

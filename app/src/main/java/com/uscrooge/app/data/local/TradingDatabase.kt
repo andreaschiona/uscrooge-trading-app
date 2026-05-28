@@ -7,6 +7,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.uscrooge.app.data.model.AuditLogEntry
 import com.uscrooge.app.data.model.*
 
 private const val TAG = "TradingDatabase"
@@ -83,14 +84,41 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        try {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    category TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    details TEXT NOT NULL,
+                    severity TEXT NOT NULL DEFAULT 'INFO'
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_category ON audit_log(category)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_audit_log_category_timestamp ON audit_log(category, timestamp)")
+            Log.i(TAG, "Migration 5->6 completed: created audit_log table")
+        } catch (e: Exception) {
+            Log.e(TAG, "Migration 5->6 failed", e)
+            throw e
+        }
+    }
+}
+
 @Database(
     entities = [
         TradingSignal::class,
         Order::class,
         Position::class,
-        TradeJournalEntry::class
+        TradeJournalEntry::class,
+        AuditLogEntry::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {
@@ -99,6 +127,7 @@ abstract class TradingDatabase : RoomDatabase() {
     abstract fun orderDao(): OrderDao
     abstract fun positionDao(): PositionDao
     abstract fun tradeJournalDao(): TradeJournalDao
+    abstract fun auditLogDao(): AuditLogDao
 
     companion object {
         @Volatile
@@ -111,7 +140,7 @@ abstract class TradingDatabase : RoomDatabase() {
                     TradingDatabase::class.java,
                     "uscrooge_database"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigrationFrom(1)
                     .build()
                 INSTANCE = instance

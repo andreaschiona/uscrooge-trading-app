@@ -34,5 +34,5 @@
       }
     }
   },
-  "model": "google/gemini-2.5-flash"
+  "model": "opencode/deepseek-v4-flash-free"
 }

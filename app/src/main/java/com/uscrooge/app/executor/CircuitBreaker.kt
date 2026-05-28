@@ -37,7 +37,7 @@ class CircuitBreaker @Inject constructor(
     /**
      * Returns null if trading is allowed, or a reason string if it should be blocked.
      */
-    suspend fun checkTradingAllowed(config: TradingConfig): String? {
+    suspend fun checkTradingAllowed(config: TradingConfig, skipDrawdownCheck: Boolean = false): String? {
         if (!config.circuitBreakerEnabled) return null
 
         // Check cooldown
@@ -69,10 +69,12 @@ class CircuitBreaker @Inject constructor(
         }
 
         // Check daily drawdown
-        val drawdownCheck = checkDailyDrawdown(config)
-        if (drawdownCheck != null) {
-            trip(drawdownCheck)
-            return tripReason
+        if (!skipDrawdownCheck) {
+            val drawdownCheck = checkDailyDrawdown(config)
+            if (drawdownCheck != null) {
+                trip(drawdownCheck)
+                return tripReason
+            }
         }
 
         return null

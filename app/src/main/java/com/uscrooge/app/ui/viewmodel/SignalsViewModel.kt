@@ -62,7 +62,7 @@ class SignalsViewModel @Inject constructor(
             try {
                 _executionState.value = ExecutionState.Executing(signal.id)
 
-                val result = orderExecutor.executeSignal(signal)
+                val result = orderExecutor.executeSignal(signal, bypassCircuitBreaker = true)
 
                 if (result.isSuccess) {
                     _executionState.value = ExecutionState.Success("Order executed successfully")

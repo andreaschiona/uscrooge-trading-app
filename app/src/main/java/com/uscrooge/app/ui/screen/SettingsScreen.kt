@@ -228,6 +228,21 @@ fun SettingsScreen(
                     }
                 }
 
+                // Appearance
+                item {
+                    SettingsSection(title = "Appearance") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SwitchSetting(
+                                title = "Dark Mode",
+                                checked = currentConfig.useDarkMode,
+                                onCheckedChange = { checked ->
+                                    editedConfig = currentConfig.copy(useDarkMode = checked)
+                                }
+                            )
+                        }
+                    }
+                }
+
                 // Execution Settings
                 item {
                     SettingsSection(title = "Execution") {

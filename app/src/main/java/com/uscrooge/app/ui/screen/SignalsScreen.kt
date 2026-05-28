@@ -15,8 +15,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Velocity
 import com.uscrooge.app.data.model.AnalysisLog
 import com.uscrooge.app.data.model.AnalysisLogEntry
 import com.uscrooge.app.data.model.SignalStatus
@@ -36,64 +38,114 @@ fun SignalsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val executionState by viewModel.executionState.collectAsState()
     val analysisLog by viewModel.lastAnalysisLog.collectAsState()
+    var isRefreshing by remember { mutableStateOf(false) }
+    var pullOffset by remember { mutableStateOf(0f) }
+    val refreshThreshold = 120f
 
-    Column(
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            viewModel.refreshSignals()
+            kotlinx.coroutines.delay(800)
+            isRefreshing = false
+            pullOffset = 0f
+        }
+    }
+
+    val nestedScrollConnection = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (available.y < 0f && pullOffset > 0f) {
+                    pullOffset = maxOf(0f, pullOffset + available.y)
+                    return androidx.compose.ui.geometry.Offset(0f, available.y)
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (available.y > 0f && !isRefreshing) {
+                    pullOffset = minOf(refreshThreshold, pullOffset + available.y)
+                    return androidx.compose.ui.geometry.Offset(0f, available.y)
+                }
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullOffset >= refreshThreshold && !isRefreshing) {
+                    isRefreshing = true
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
             .padding(16.dp)
     ) {
-        // Show execution state snackbar
-        when (val state = executionState) {
-            is ExecutionState.Success -> {
-                Snackbar(
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Text(state.message)
-                }
-            }
-            is ExecutionState.Error -> {
-                Snackbar(
-                    modifier = Modifier.padding(bottom = 8.dp),
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                ) {
-                    Text(state.message)
-                }
-            }
-            else -> {}
-        }
-
-        // Last analysis log
-        analysisLog?.let { log ->
-            AnalysisLogCard(log)
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        when (val state = uiState) {
-            is SignalsUiState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            is SignalsUiState.Success -> {
-                SignalsContent(
-                    signals = state.signals,
-                    executionState = executionState,
-                    onExecute = { viewModel.executeSignal(it) },
-                    onIgnore = { viewModel.ignoreSignal(it) },
-                    onRefresh = { viewModel.refreshSignals() }
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (pullOffset > 0f || isRefreshing) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary
                 )
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
-            is SignalsUiState.Error -> {
-                ErrorView(
-                    message = state.message,
-                    onRetry = { viewModel.refreshSignals() }
-                )
+            // Show execution state snackbar
+            when (val state = executionState) {
+                is ExecutionState.Success -> {
+                    Snackbar(
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Text(state.message)
+                    }
+                }
+                is ExecutionState.Error -> {
+                    Snackbar(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    ) {
+                        Text(state.message)
+                    }
+                }
+                else -> {}
+            }
+
+            // Last analysis log
+            analysisLog?.let { log ->
+                AnalysisLogCard(log)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            when (val state = uiState) {
+                is SignalsUiState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is SignalsUiState.Success -> {
+                    SignalsContent(
+                        signals = state.signals,
+                        executionState = executionState,
+                        onExecute = { viewModel.executeSignal(it) },
+                        onIgnore = { viewModel.ignoreSignal(it) },
+                        onRefresh = { isRefreshing = true }
+                    )
+                }
+
+                is SignalsUiState.Error -> {
+                    ErrorView(
+                        message = state.message,
+                        onRetry = { isRefreshing = true }
+                    )
+                }
             }
         }
     }

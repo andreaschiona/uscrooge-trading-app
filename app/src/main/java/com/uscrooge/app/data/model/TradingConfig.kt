@@ -51,6 +51,9 @@ data class TradingConfig(
     val maxCryptoPairsToScan: Int = 15,          // Max crypto pairs scanned (wishlist + dynamic)
     val maxStockPairsToScan: Int = 20,           // Max stock pairs scanned (wishlist + dynamic)
 
+    // UI preferences
+    val useDarkMode: Boolean = false,
+
     // Multi-timeframe analysis
     val useMultiTimeframe: Boolean = true,
     val primaryTimeframe: Int = 60,            // 1 hour

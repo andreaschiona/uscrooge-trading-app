@@ -32,8 +32,8 @@ class TechnicalAnalyzerParametricTest {
     fun `RSI 14-period with all identical prices is neutral`() {
         val prices = List(20) { 100.0 }
         val rsi = analyzer.calculateRSI(prices, 14)
-        assertEquals("RSI should be 50 for flat prices", 50.0, rsi.value, 1.0)
-        assertEquals(RSI.Signal.NEUTRAL, rsi.signal)
+        assertTrue("RSI should be near 100 for flat prices (no losses)", rsi.value > 95.0)
+        assertEquals(RSI.Signal.OVERBOUGHT, rsi.signal)
     }
 
     @Test

@@ -5,6 +5,9 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.uscrooge.app.BuildConfig
+import com.uscrooge.app.data.model.Position
+import com.uscrooge.app.data.model.TradingConfig
+import com.uscrooge.app.data.model.TradingSignal
 import com.uscrooge.app.security.ApiSecurityManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -161,6 +164,92 @@ class GitHubIssueReporter(
         val json = response.body?.string() ?: throw Exception("Empty response")
         val created = gson.fromJson(json, GitHubIssue::class.java)
         return created.number
+    }
+
+    suspend fun reportPositionFeedback(
+        position: Position,
+        openingSignal: TradingSignal?,
+        exitReason: String?,
+        config: TradingConfig
+    ): Result<String> {
+        val holdingPeriod = position.closedAt?.minus(position.openedAt)
+        val holdingPeriodStr = if (holdingPeriod != null) {
+            val hours = holdingPeriod / 3_600_000
+            val minutes = holdingPeriod % 3_600_000 / 60_000
+            "${hours}h ${minutes}m"
+        } else {
+            "N/A"
+        }
+
+        val title = "[Position Analysis] ${position.pair} closed"
+        val body = buildString {
+            appendLine("## Position Analysis Request: ${position.pair}")
+            appendLine()
+            appendLine("### Position Details")
+            appendLine("- **Pair:** ${position.pair}")
+            appendLine("- **Broker:** ${position.broker}")
+            appendLine("- **Opened:** ${formatTimestamp(position.openedAt)}")
+            appendLine("- **Closed:** ${formatTimestamp(position.closedAt ?: 0)}")
+            appendLine("- **Holding Period:** $holdingPeriodStr")
+            appendLine("- **Entry Price:** ${formatPrice(position.averageEntryPrice)}")
+            appendLine("- **Exit Price:** ${formatPrice(position.currentPrice)}")
+            appendLine("- **Realized PnL:** ${formatPnL(position.realizedPnL)}")
+            appendLine()
+            appendLine("### Opening Signal")
+            if (openingSignal != null) {
+                appendLine("- **Signal Strength:** ${String.format("%.2f", openingSignal.strength)}")
+                appendLine("- **Take Profit:** ${formatPrice(openingSignal.takeProfit)}")
+                appendLine("- **Stop Loss:** ${formatPrice(openingSignal.stopLoss)}")
+                appendLine("- **Risk/Reward:** ${String.format("%.2f", openingSignal.riskRewardRatio)}")
+                appendLine("- **Reasons:** ${openingSignal.getReasonsList().joinToString(", ")}")
+            } else {
+                appendLine("- *Signal data not available*")
+            }
+            appendLine()
+            appendLine("### Exit Reason")
+            appendLine(exitReason ?: "Manual or sync-triggered close")
+            appendLine()
+            appendLine("### Current Configuration")
+            appendLine("- **Stop Loss:** ${config.stopLossPercent}%")
+            appendLine("- **Take Profit:** ${config.takeProfitPercent}%")
+            appendLine("- **Trailing Stop:** ${config.trailingStopPercent}%")
+            appendLine("- **Risk Per Trade:** ${String.format("%.0f", config.riskPerTrade * 100)}%")
+            appendLine("- **Max Open Positions:** ${config.maxOpenPositions}")
+            appendLine("- **Max Daily Trades:** ${config.maxDailyTrades}")
+            appendLine("- **Min Signal Strength:** ${config.minSignalStrength}")
+            appendLine("- **Strong Signal Threshold:** ${config.strongSignalThreshold}")
+            appendLine("- **Circuit Breaker Enabled:** ${config.circuitBreakerEnabled}")
+            appendLine("- **Max Daily Drawdown:** ${config.maxDailyDrawdownPercent}%")
+            appendLine("- **Trading Pairs:** ${config.tradingPairs.joinToString(", ")}")
+            appendLine("- **Automatic Trading:** ${config.automaticTrading}")
+            appendLine("- **Use Limit Orders:** ${config.useLimitOrders}")
+            appendLine("- **Check Interval:** ${config.checkIntervalSeconds}s")
+            appendLine()
+            appendLine("### App Version")
+            appendLine("- **Version:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine()
+            appendLine("---")
+            appendLine()
+            appendLine("_This issue was automatically created when the position was closed._")
+            appendLine("_Please analyze the trade outcome and evaluate if the current strategy is performing as expected._")
+        }
+
+        return reportError(title, body, labels = listOf("enhancement", "position-analysis", "auto-reported"))
+    }
+
+    private fun formatTimestamp(millis: Long): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+        return sdf.format(java.util.Date(millis))
+    }
+
+    private fun formatPrice(price: Double): String {
+        return String.format("%.2f", price)
+    }
+
+    private fun formatPnL(pnl: Double?): String {
+        if (pnl == null) return "N/A"
+        val sign = if (pnl >= 0) "+" else ""
+        return "$sign${String.format("%.2f", pnl)} EUR"
     }
 
     private fun parseRepo(repo: String): Pair<String, String> {

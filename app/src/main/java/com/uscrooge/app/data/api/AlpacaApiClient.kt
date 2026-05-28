@@ -21,7 +21,9 @@ class AlpacaApiClient(
     apiSecret: String = "",
     private var isPaperTrading: Boolean = true,
     timeout: Long = 30000,
-    private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 5.0, maxBurstSize = 10)
+    private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 5.0, maxBurstSize = 10),
+    private val sharedGson: com.google.gson.Gson? = null,
+    private val sharedOkHttp: OkHttpClient? = null
 ) : BrokerApi {
 
     override val brokerName: String = "Alpaca"
@@ -152,6 +154,36 @@ class AlpacaApiClient(
         okHttpClientCache = null
     }
 
+    private fun buildOkHttpClient(rateLimiter: RateLimiter): OkHttpClient {
+        val loggingLevel = if (android.util.Log.isLoggable("AlpacaApi", android.util.Log.DEBUG)) {
+            HttpLoggingInterceptor.Level.BODY
+        } else {
+            HttpLoggingInterceptor.Level.HEADERS
+        }
+        return (sharedOkHttp?.newBuilder()
+            ?: OkHttpClient.Builder()
+                .connectTimeout(timeout, TimeUnit.MILLISECONDS)
+                .readTimeout(timeout, TimeUnit.MILLISECONDS)
+                .writeTimeout(timeout, TimeUnit.MILLISECONDS))
+            .addInterceptor(RateLimitInterceptor(rateLimiter))
+            .addInterceptor(HttpLoggingInterceptor().apply { level = loggingLevel })
+            .apply {
+                if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
+                    addInterceptor(AlpacaAuthInterceptor(apiKey, apiSecret))
+                }
+            }
+            .build()
+    }
+
+    private fun buildRetrofit(baseUrl: String, client: OkHttpClient): Retrofit {
+        val gson = sharedGson ?: com.google.gson.Gson()
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+    }
+
     private fun getApiService(): AlpacaApiService {
         val cacheKey = "$apiKey|$apiSecret|$timeout|$isPaperTrading"
         val cached = apiServiceCache
@@ -164,26 +196,8 @@ class AlpacaApiClient(
                 return apiServiceCache!!
             }
 
-            val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(timeout, TimeUnit.MILLISECONDS)
-                .readTimeout(timeout, TimeUnit.MILLISECONDS)
-                .writeTimeout(timeout, TimeUnit.MILLISECONDS)
-                .addInterceptor(RateLimitInterceptor(rateLimiter))
-                .addInterceptor(HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.HEADERS
-                })
-                .apply {
-                    if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
-                        addInterceptor(AlpacaAuthInterceptor(apiKey, apiSecret))
-                    }
-                }
-                .build()
-
-            val retrofit = Retrofit.Builder()
-                .baseUrl(tradingBaseUrl)
-                .client(okHttpClient)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
+            val okHttpClient = buildOkHttpClient(rateLimiter)
+            val retrofit = buildRetrofit(tradingBaseUrl, okHttpClient)
 
             val service = retrofit.create(AlpacaApiService::class.java)
             apiServiceCache = service
@@ -205,26 +219,8 @@ class AlpacaApiClient(
                 return dataApiServiceCache!!
             }
 
-            val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(timeout, TimeUnit.MILLISECONDS)
-                .readTimeout(timeout, TimeUnit.MILLISECONDS)
-                .writeTimeout(timeout, TimeUnit.MILLISECONDS)
-                .addInterceptor(RateLimitInterceptor(dataRateLimiter))
-                .addInterceptor(HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.HEADERS
-                })
-                .apply {
-                    if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
-                        addInterceptor(AlpacaAuthInterceptor(apiKey, apiSecret))
-                    }
-                }
-                .build()
-
-            val retrofit = Retrofit.Builder()
-                .baseUrl(dataBaseUrl)
-                .client(okHttpClient)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build()
+            val okHttpClient = buildOkHttpClient(dataRateLimiter)
+            val retrofit = buildRetrofit(dataBaseUrl, okHttpClient)
 
             val service = retrofit.create(AlpacaApiService::class.java)
             dataApiServiceCache = service

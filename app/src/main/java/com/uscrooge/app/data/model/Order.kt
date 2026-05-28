@@ -1,9 +1,18 @@
 package com.uscrooge.app.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "orders")
+@Entity(
+    tableName = "orders",
+    indices = [
+        Index("pair"),
+        Index("status"),
+        Index("createdAt"),
+        Index("pair", "status")
+    ]
+)
 data class Order(
     @PrimaryKey
     val orderId: String,

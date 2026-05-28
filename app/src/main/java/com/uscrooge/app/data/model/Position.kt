@@ -1,9 +1,18 @@
 package com.uscrooge.app.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "positions")
+@Entity(
+    tableName = "positions",
+    indices = [
+        Index("pair"),
+        Index("isOpen"),
+        Index("broker"),
+        Index("pair", "isOpen")
+    ]
+)
 data class Position(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

@@ -1,9 +1,18 @@
 package com.uscrooge.app.data.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "trading_signals")
+@Entity(
+    tableName = "trading_signals",
+    indices = [
+        Index("pair"),
+        Index("status"),
+        Index("timestamp"),
+        Index("pair", "status")
+    ]
+)
 data class TradingSignal(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

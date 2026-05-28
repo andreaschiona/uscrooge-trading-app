@@ -1,6 +1,7 @@
 package com.uscrooge.app.data.api
 
 import com.uscrooge.app.data.model.*
+import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -13,7 +14,9 @@ class KrakenApiClient(
     apiKey: String = "",
     apiSecret: String = "",
     timeout: Long = 30000,
-    private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 2.0, maxBurstSize = 5)
+    private val rateLimiter: RateLimiter = RateLimiter(permitsPerSecond = 2.0, maxBurstSize = 5),
+    private val sharedGson: Gson? = null,
+    private val sharedOkHttp: OkHttpClient? = null
 ) : BrokerApi {
     private val baseUrl = "https://api.kraken.com/"
 
@@ -135,13 +138,19 @@ class KrakenApiClient(
                 return apiServiceCache!!
             }
 
-            val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(timeout, TimeUnit.MILLISECONDS)
-                .readTimeout(timeout, TimeUnit.MILLISECONDS)
-                .writeTimeout(timeout, TimeUnit.MILLISECONDS)
+            val loggingLevel = if (android.util.Log.isLoggable("KrakenApi", android.util.Log.DEBUG)) {
+                HttpLoggingInterceptor.Level.BODY
+            } else {
+                HttpLoggingInterceptor.Level.HEADERS
+            }
+            val okHttpClient = (sharedOkHttp?.newBuilder()
+                ?: OkHttpClient.Builder()
+                    .connectTimeout(timeout, TimeUnit.MILLISECONDS)
+                    .readTimeout(timeout, TimeUnit.MILLISECONDS)
+                    .writeTimeout(timeout, TimeUnit.MILLISECONDS))
                 .addInterceptor(RateLimitInterceptor(rateLimiter))
                 .addInterceptor(HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
+                    level = loggingLevel
                 })
                 .apply {
                     if (apiKey.isNotEmpty() && apiSecret.isNotEmpty()) {
@@ -150,10 +159,11 @@ class KrakenApiClient(
                 }
                 .build()
 
+            val gson = sharedGson ?: Gson()
             val retrofit = Retrofit.Builder()
                 .baseUrl(baseUrl)
                 .client(okHttpClient)
-                .addConverterFactory(GsonConverterFactory.create())
+                .addConverterFactory(GsonConverterFactory.create(gson))
                 .build()
 
             val service = retrofit.create(KrakenApiService::class.java)

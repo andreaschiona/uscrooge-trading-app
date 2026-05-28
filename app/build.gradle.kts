@@ -138,7 +138,7 @@ android {
 
     testOptions {
         unitTests {
-            returnDefaultValues = true
+            isReturnDefaultValues = true
         }
     }
 

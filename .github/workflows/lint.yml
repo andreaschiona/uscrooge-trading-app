@@ -24,3 +24,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
+          VALIDATE_KOTLIN_KT_LINT: true
+          VALIDATE_KOTLIN_BIOME: true
+          VALIDATE_YAML: true
+          VALIDATE_JSON: true
+          VALIDATE_XML: true
+          VALIDATE_MARKDOWN: true
+          VALIDATE_PROPERTIES: true
+          VALIDATE_GITHUB_ACTIONS: true
+          FILTER_REGEX_EXCLUDE: \.jks$|\.jar$|\.keystore$

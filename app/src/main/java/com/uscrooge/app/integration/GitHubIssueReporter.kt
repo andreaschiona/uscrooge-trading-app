@@ -175,7 +175,7 @@ class GitHubIssueReporter(
         val holdingPeriod = position.closedAt?.minus(position.openedAt)
         val holdingPeriodStr = if (holdingPeriod != null) {
             val hours = holdingPeriod / 3_600_000
-            val minutes = (holdingPeriod % 3_600_000) / 60_000
+            val minutes = holdingPeriod % 3_600_000 / 60_000
             "${hours}h ${minutes}m"
         } else {
             "N/A"

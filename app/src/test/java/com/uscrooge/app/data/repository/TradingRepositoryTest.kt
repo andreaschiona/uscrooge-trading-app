@@ -37,12 +37,12 @@ class TradingRepositoryTest {
     @Before
     fun setup() {
         mockkStatic(android.util.Log::class)
-        every { android.util.Log.w(any(), any()) } returns 0
-        every { android.util.Log.w(any(), any(), any()) } returns 0
-        every { android.util.Log.e(any(), any()) } returns 0
-        every { android.util.Log.e(any(), any(), any()) } returns 0
-        every { android.util.Log.d(any(), any()) } returns 0
-        every { android.util.Log.i(any(), any()) } returns 0
+        every { android.util.Log.w(any<String>(), any<String>()) } returns 0
+        every { android.util.Log.w(any<String>(), any<Throwable>()) } returns 0
+        every { android.util.Log.e(any<String>(), any<String>()) } returns 0
+        every { android.util.Log.e(any<String>(), any<String>(), any<Throwable>()) } returns 0
+        every { android.util.Log.d(any<String>(), any<String>()) } returns 0
+        every { android.util.Log.i(any<String>(), any<String>()) } returns 0
         every { context.getSharedPreferences(any(), any()) } returns mockk {
             every { getString(any(), any()) } returns null
             every { edit() } returns mockk {

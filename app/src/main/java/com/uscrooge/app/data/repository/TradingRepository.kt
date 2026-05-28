@@ -581,11 +581,12 @@ class TradingRepository @Inject constructor(
             for (pos in krakenPositions) {
                 val base = resolveBaseFromKrakenPair(pos.symbol, krakenToBase) ?: continue
                 if (base !in configuredBases) continue
-                activeBases.add(base)
 
                 val pairSymbol = "$base/EUR"
                 if (pairSymbol !in config.tradingPairs.map { it.uppercase() } &&
                     pairSymbol !in config.tradingPairs) continue
+
+                activeBases.add(base)
 
                 val quantity = pos.quantity
                 val avgEntryPrice = pos.avgEntryPrice
@@ -839,13 +840,14 @@ class TradingRepository @Inject constructor(
         krakenPair: String,
         krakenToBase: Map<String, String>
     ): String? {
+        val normalized = krakenPair.replace("/", "")
         val eurSuffixes = listOf("ZEUR", "EUR")
         val usdSuffixes = listOf("ZUSD", "USD")
         val allSuffixes = eurSuffixes + usdSuffixes
 
         for (suffix in allSuffixes) {
-            if (krakenPair.endsWith(suffix)) {
-                val rawBase = krakenPair.removeSuffix(suffix)
+            if (normalized.endsWith(suffix)) {
+                val rawBase = normalized.removeSuffix(suffix)
                 return krakenToBase[rawBase] ?: rawBase
             }
         }

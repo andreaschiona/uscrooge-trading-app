@@ -2,7 +2,7 @@ package com.uscrooge.app.data.api
 
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonElement
 import com.uscrooge.app.data.model.*
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -450,18 +450,26 @@ class AlpacaApiClient(
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
     private fun parseBars(jsonString: String, symbol: String): List<OHLC> {
-        val gson = Gson()
-        val jsonElement = gson.fromJson(jsonString, com.google.gson.JsonElement::class.java)
+        val jsonElement = Gson().fromJson(jsonString, JsonElement::class.java)
         val barsElement = jsonElement.asJsonObject["bars"]
 
-        val barsList: List<Map<String, Any>> = when {
+        val barsList: List<Map<String, Any?>> = when {
             barsElement.isJsonArray -> {
-                gson.fromJson<List<Map<String, Any>>>(barsElement, object : TypeToken<List<Map<String, Any>>>() {}.type)
+                barsElement.asJsonArray.map { element ->
+                    element.asJsonObject.entrySet().associate { entry ->
+                        entry.key to jsonElementToValue(entry.value)
+                    }
+                }
             }
             barsElement.isJsonObject -> {
-                val barsMap = gson.fromJson<Map<String, List<Map<String, Any>>>>(barsElement, object : TypeToken<Map<String, List<Map<String, Any>>>>() {}.type)
+                val barsMap = barsElement.asJsonObject.entrySet().associate { entry ->
+                    entry.key to entry.value.asJsonArray.map { element ->
+                        element.asJsonObject.entrySet().associate { innerEntry ->
+                            innerEntry.key to jsonElementToValue(innerEntry.value)
+                        }
+                    }
+                }
                 barsMap[symbol] ?: barsMap.values.firstOrNull() ?: emptyList()
             }
             else -> emptyList()
@@ -484,6 +492,22 @@ class AlpacaApiClient(
                 Log.w(TAG, "Failed to parse bar: $bar - ${e.message}")
                 null
             }
+        }
+    }
+
+    private fun jsonElementToValue(element: JsonElement): Any? {
+        return when {
+            element.isJsonNull -> null
+            element.isJsonPrimitive -> {
+                val primitive = element.asJsonPrimitive
+                when {
+                    primitive.isString -> primitive.asString
+                    primitive.isNumber -> primitive.asNumber
+                    primitive.isBoolean -> primitive.asBoolean
+                    else -> ""
+                }
+            }
+            else -> element.toString()
         }
     }
 

@@ -42,7 +42,10 @@ fun EquityCurveChart(
     LaunchedEffect(dataPoints) {
         modelProducer.runTransaction {
             lineSeries {
-                series(dataPoints.map { it.first }, dataPoints.map { it.second })
+                series(
+                    dataPoints.map { kotlin.math.round(it.first * 10000f) / 10000f },
+                    dataPoints.map { it.second }
+                )
             }
         }
     }

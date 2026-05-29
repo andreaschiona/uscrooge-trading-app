@@ -76,7 +76,7 @@ class DashboardViewModel @Inject constructor(
         sorted.forEachIndexed { index, pos ->
             cumulativeInvested += pos.totalInvested
             cumulativeValue += pos.currentValue
-            val timeIndex = (index + 1).toFloat() / sorted.size.toFloat() * 100f
+            val timeIndex = kotlin.math.round((index + 1).toFloat() / sorted.size.toFloat() * 100f * 10000f) / 10000f
             points.add(timeIndex to cumulativeValue.toFloat())
         }
 

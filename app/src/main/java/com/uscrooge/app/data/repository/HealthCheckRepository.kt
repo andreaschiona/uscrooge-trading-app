@@ -123,7 +123,7 @@ class HealthCheckRepository @Inject constructor(
                     value = null,
                     status = BrokerHealthStatus.OFFLINE,
                     latencyMs = latency,
-                    lastError = "HTTP ${response.code()}",
+                    lastError = "HTTP ${response.code}",
                     lastChecked = startTime
                 )
             }

@@ -14,7 +14,7 @@
 - Single unit test method: `./gradlew.bat :app:testDebugUnitTest --tests "com.uscrooge.app.TechnicalAnalyzerTest.RSI calculation with oversold condition"`
 
 ## Environment/toolchain constraints
-- Project targets AGP `8.2.0`, Kotlin `1.9.20`, Gradle `8.2`, `compileSdk 34`, `minSdk 26`, Java/Kotlin JVM target 17.
+- Project targets AGP `8.6.1`, Kotlin `2.1.0`, KSP `2.1.0-1.0.29`, Hilt `2.53`, Gradle `8.10`, `compileSdk 35`, `targetSdk 35`, `minSdk 26`, Java/Kotlin JVM target 17.
 - `local.properties` is required for local SDK path (`sdk.dir=...`) and should stay local-only.
 - If Gradle fails early with `IllegalArgumentException: 25.0.3`, the process is running on an unsupported JDK; switch to JDK 17.
 

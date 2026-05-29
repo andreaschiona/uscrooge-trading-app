@@ -111,21 +111,18 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Trading Pairs Section
+                // Appearance (now first)
                 item {
-                    SettingsSection(title = "Trading Pairs") {
-                        OutlinedTextField(
-                            value = currentConfig.tradingPairs.joinToString(", "),
-                            onValueChange = { value ->
-                                editedConfig = currentConfig.copy(
-                                    tradingPairs = value.split(",").map { it.trim() }
-                                )
-                            },
-                            label = { Text("Trading Pairs") },
-                            placeholder = { Text("BTC/EUR, ETH/EUR, SOL/EUR") },
-                            modifier = Modifier.fillMaxWidth(),
-                            supportingText = { Text("Comma-separated list") }
-                        )
+                    SettingsSection(title = "Appearance") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SwitchSetting(
+                                title = "Dark Mode",
+                                checked = currentConfig.useDarkMode,
+                                onCheckedChange = { checked ->
+                                    editedConfig = currentConfig.copy(useDarkMode = checked)
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -223,21 +220,6 @@ fun SettingsScreen(
                                 label = { Text("Trailing Stop (%)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-
-                // Appearance
-                item {
-                    SettingsSection(title = "Appearance") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SwitchSetting(
-                                title = "Dark Mode",
-                                checked = currentConfig.useDarkMode,
-                                onCheckedChange = { checked ->
-                                    editedConfig = currentConfig.copy(useDarkMode = checked)
-                                }
                             )
                         }
                     }
@@ -343,7 +325,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // API Configuration
+                // API Configuration - Kraken (Crypto)
                 item {
                     SettingsSection(title = "Kraken API (Crypto)") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -376,6 +358,19 @@ fun SettingsScreen(
                                     keyboardType = KeyboardType.Ascii
                                 ),
                                 singleLine = true
+                            )
+
+                            OutlinedTextField(
+                                value = currentConfig.tradingPairs.joinToString(", "),
+                                onValueChange = { value ->
+                                    editedConfig = currentConfig.copy(
+                                        tradingPairs = value.split(",").map { it.trim() }
+                                    )
+                                },
+                                label = { Text("Trading Pairs") },
+                                placeholder = { Text("BTC/EUR, ETH/EUR, SOL/EUR") },
+                                modifier = Modifier.fillMaxWidth(),
+                                supportingText = { Text("Comma-separated list") }
                             )
 
                             Text(
@@ -517,7 +512,7 @@ fun SettingsScreen(
                                 }
                             )
                             Text(
-                                text = "Set in local.properties as reportingGhToken or via env REPORTING_GH_TOKEN.",
+                                text = "Used to automatically notify the GitHub project of errors.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

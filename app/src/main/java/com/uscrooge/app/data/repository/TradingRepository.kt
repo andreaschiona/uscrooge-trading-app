@@ -195,27 +195,48 @@ class TradingRepository @Inject constructor(
         val localTotalInvested = positions.sumOf { it.totalInvested }
         val localCurrentValue = positions.sumOf { it.currentValue }
 
-        // Fetch balances concurrently
-        val krakenBalanceDeferred = async { krakenApiClient.getAccountBalance() }
-        val tradeBalanceDeferred = async { krakenApiClient.getTradeBalance("ZEUR") }
+        // Fetch balances from Kraken if crypto trading is enabled
+        val cryptoEnabled = config?.krakenApiKey.isNullOrBlank().not()
+        val krakenBalanceDeferred = if (cryptoEnabled) {
+            async { krakenApiClient.getAccountBalance() }
+        } else null
+        val tradeBalanceDeferred = if (cryptoEnabled) {
+            async { krakenApiClient.getTradeBalance("ZEUR") }
+        } else null
 
-        val krakenBalanceResult = krakenBalanceDeferred.await()
-        val krakenBalances = krakenBalanceResult.getOrNull().orEmpty()
-        val availableFromKrakenBalance = krakenBalances.entries
-            .filter { (asset, _) ->
-                val normalizedAsset = asset.normalizeKrakenAsset()
-                val suffix = asset.krakenAssetSuffix()
-                normalizedAsset in EUR_ASSETS && suffix != "HOLD"
+        val krakenKeyInfo: Set<String> = if (cryptoEnabled) {
+            val krakenBalanceResult = krakenBalanceDeferred!!.await()
+            val krakenBalances = krakenBalanceResult.getOrNull().orEmpty()
+
+            krakenBalanceResult.exceptionOrNull()?.let { error ->
+                Log.w(TAG, "Kraken Balance call failed: ${error.message}")
             }
-            .sumOf { it.value }
 
-        krakenBalanceResult.exceptionOrNull()?.let { error ->
-            Log.w(TAG, "Kraken Balance call failed: ${error.message}")
+            krakenBalances.keys
+        } else {
+            emptySet()
         }
 
-        val tradeBalance = tradeBalanceDeferred.await().getOrNull()
-        val availableFromTradeBalance = tradeBalance?.mf?.toDoubleOrNull()
-            ?: tradeBalance?.tb?.toDoubleOrNull()
+        val (availableFromKrakenBalance, availableFromTradeBalance) = if (cryptoEnabled) {
+            val krakenBalanceResult = krakenBalanceDeferred!!.await()
+            val krakenBalances = krakenBalanceResult.getOrNull().orEmpty()
+            val balance = krakenBalances.entries
+                .filter { (asset, _) ->
+                    val normalizedAsset = asset.normalizeKrakenAsset()
+                    val suffix = asset.krakenAssetSuffix()
+                    normalizedAsset in EUR_ASSETS && suffix != "HOLD"
+                }
+                .sumOf { it.value }
+
+            val tradeBalanceResult = tradeBalanceDeferred!!.await()
+            val tradeBal = tradeBalanceResult.getOrNull()?.let { tb ->
+                tb.mf?.toDoubleOrNull() ?: tb.tb?.toDoubleOrNull()
+            }
+
+            Pair(balance, tradeBal)
+        } else {
+            Pair(0.0, null)
+        }
 
         var availableBalance = when {
             availableFromKrakenBalance > 0.0 -> availableFromKrakenBalance
@@ -244,12 +265,8 @@ class TradingRepository @Inject constructor(
             }
         }
 
-        if (availableBalance == 0.0) {
-            Log.d(TAG, "Kraken Balance assets=${krakenBalances.keys.sorted()} availableFromKrakenBalance=$availableFromKrakenBalance")
-            Log.d(
-                TAG,
-                "Kraken TradeBalance mf=${tradeBalance?.mf} tb=${tradeBalance?.tb} e=${tradeBalance?.e}"
-            )
+        if (availableBalance == 0.0 && cryptoEnabled) {
+            Log.d(TAG, "Kraken Balance assets=${krakenKeyInfo.sorted()} availableFromKrakenBalance=$availableFromKrakenBalance")
         }
 
         // Compute totals from all locally-stored positions (Kraken + Alpaca).
@@ -385,16 +402,19 @@ class TradingRepository @Inject constructor(
         val availableBalance = portfolio.availableBalance
 
         // Build crypto list: wishlist always included, supplemented by dynamic Kraken pairs
-        val quoteCurrency = config.tradingPairs.firstOrNull()
-            ?.substringAfter("/")?.uppercase() ?: "EUR"
-        val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
-        val wishlistPairs = config.tradingPairs.map { it.uppercase() }.toSet()
-        val cryptoPairsToAnalyze = (wishlistPairs + dynamicKrakenPairs)
-            .distinct()
-            // wishlist items first, then dynamic additions
-            .sortedWith(compareByDescending { it in wishlistPairs })
-            .take(config.maxCryptoPairsToScan)
-        Log.d(TAG, "Analyzing ${cryptoPairsToAnalyze.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
+        val cryptoPairsToAnalyze = run {
+            val quoteCurrency = config.tradingPairs.firstOrNull()
+                ?.substringAfter("/")?.uppercase() ?: "EUR"
+            val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
+            val wishlistPairs = config.tradingPairs.map { it.uppercase() }.toSet()
+            (wishlistPairs + dynamicKrakenPairs)
+                .distinct()
+                .sortedWith(compareByDescending { it in wishlistPairs })
+                .take(config.maxCryptoPairsToScan)
+                .also { scanned ->
+                    Log.d(TAG, "Analyzing ${scanned.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
+                }
+        }
 
         for (pair in cryptoPairsToAnalyze) {
             try {

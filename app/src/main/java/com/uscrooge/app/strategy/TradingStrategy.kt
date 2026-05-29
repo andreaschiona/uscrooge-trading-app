@@ -139,116 +139,29 @@ class TradingStrategy @Inject constructor(
         higherTimeframeTrends: List<Trend> = emptyList(),
         sentiment: FearGreedIndex? = null
     ): SignalType {
-        var buyScore = 0.0
+        var buyScore = scoreRSI(analysis) + scoreMACD(analysis) + scoreTrend(analysis)
         var sellScore = 0.0
 
-        // RSI signals
-        when (analysis.rsi.signal) {
-            RSI.Signal.OVERSOLD -> buyScore += 2.0
-            RSI.Signal.BULLISH -> buyScore += 1.0
-            RSI.Signal.BEARISH -> sellScore += 1.0
-            RSI.Signal.OVERBOUGHT -> sellScore += 2.0
-            RSI.Signal.NEUTRAL -> {}
-        }
+        val candleScore = scoreCandlestickPattern(analysis)
+        if (candleScore > 0) buyScore += candleScore else sellScore += abs(candleScore)
 
-        // MACD signals
-        when (analysis.macd.signal) {
-            MACD.Signal.BULLISH_CROSSOVER -> buyScore += 2.0
-            MACD.Signal.BULLISH -> buyScore += 1.0
-            MACD.Signal.BEARISH -> sellScore += 1.0
-            MACD.Signal.BEARISH_CROSSOVER -> sellScore += 2.0
-            MACD.Signal.NEUTRAL -> {}
-        }
+        val volumeAdjusted = applyVolumeConfidence(analysis, buyScore, sellScore)
+        buyScore = volumeAdjusted.first
+        sellScore = volumeAdjusted.second
 
-        // Trend signals
-        when (analysis.trend) {
-            Trend.STRONG_UPTREND -> buyScore += 1.5
-            Trend.UPTREND -> buyScore += 0.5
-            Trend.STRONG_DOWNTREND -> sellScore += 1.5
-            Trend.DOWNTREND -> sellScore += 0.5
-            Trend.SIDEWAYS -> {}
-        }
+        val bbScore = scoreBollinger(analysis)
+        if (bbScore > 0) buyScore += bbScore else sellScore += abs(bbScore)
 
-        // Candlestick pattern signals
-        analysis.candlestickPattern?.let { pattern ->
-            if (pattern.bullish) {
-                buyScore += pattern.strength
-            } else {
-                sellScore += pattern.strength
-            }
-        }
+        val adxAdjusted = applyADXConfidence(analysis, buyScore, sellScore)
+        buyScore = adxAdjusted.first
+        sellScore = adxAdjusted.second
 
-        // Volume confirmation
-        when (analysis.volume.signal) {
-            VolumeAnalysis.Signal.HIGH_VOLUME,
-            VolumeAnalysis.Signal.ABOVE_AVERAGE -> {
-                // Volume confirms the direction
-                if (buyScore > sellScore) buyScore += 0.5
-                else if (sellScore > buyScore) sellScore += 0.5
-            }
-            VolumeAnalysis.Signal.LOW_VOLUME,
-            VolumeAnalysis.Signal.BELOW_AVERAGE -> {
-                // Weak volume, reduce confidence
-                buyScore *= 0.8
-                sellScore *= 0.8
-            }
-            else -> {}
-        }
+        val stochScore = scoreStochRSI(analysis)
+        if (stochScore > 0) buyScore += stochScore else sellScore += abs(stochScore)
 
-        // Bollinger Bands signals
-        analysis.bollingerBands?.let { bb ->
-            when (bb.signal) {
-                BollingerBands.Signal.BELOW_LOWER -> buyScore += 1.0
-                BollingerBands.Signal.NEAR_LOWER -> buyScore += 0.5
-                BollingerBands.Signal.ABOVE_UPPER -> sellScore += 1.0
-                BollingerBands.Signal.NEAR_UPPER -> sellScore += 0.5
-                BollingerBands.Signal.MIDDLE -> {}
-            }
-        }
-
-        // ADX signals
-        analysis.adx?.let { adx ->
-            when (adx.signal) {
-                ADX.Signal.STRONG_TREND -> {
-                    // Boost the dominant direction
-                    if (buyScore > sellScore) buyScore += 0.5
-                    else if (sellScore > buyScore) sellScore += 0.5
-                }
-                ADX.Signal.WEAK_TREND -> {
-                    // Reduce confidence in ranging market
-                    buyScore *= 0.85
-                    sellScore *= 0.85
-                }
-                ADX.Signal.MODERATE_TREND -> {}
-            }
-        }
-
-        // Stochastic RSI signals
-        analysis.stochasticRSI?.let { stoch ->
-            when (stoch.signal) {
-                StochasticRSI.Signal.OVERSOLD -> buyScore += 0.75
-                StochasticRSI.Signal.BULLISH -> buyScore += 0.3
-                StochasticRSI.Signal.BEARISH -> sellScore += 0.3
-                StochasticRSI.Signal.OVERBOUGHT -> sellScore += 0.75
-                StochasticRSI.Signal.NEUTRAL -> {}
-            }
-        }
-
-        // Multi-timeframe confirmation filter
-        if (higherTimeframeTrends.isNotEmpty()) {
-            for (htfTrend in higherTimeframeTrends) {
-                when (htfTrend) {
-                    Trend.STRONG_DOWNTREND -> buyScore -= 1.0
-                    Trend.DOWNTREND -> buyScore -= 0.5
-                    Trend.STRONG_UPTREND -> sellScore -= 1.0
-                    Trend.UPTREND -> sellScore -= 0.5
-                    Trend.SIDEWAYS -> {}
-                }
-            }
-            // Clamp to zero
-            if (buyScore < 0) buyScore = 0.0
-            if (sellScore < 0) sellScore = 0.0
-        }
+        val timeframeAdjusted = applyMultiTimeframeFilter(higherTimeframeTrends, buyScore, sellScore)
+        buyScore = timeframeAdjusted.first
+        sellScore = timeframeAdjusted.second
 
         val sentimentAdjustment = calculateSentimentAdjustment(sentiment)
         if (sentimentAdjustment > 0) {
@@ -262,6 +175,111 @@ class TradingStrategy @Inject constructor(
             sellScore > buyScore && sellScore >= 2.5 -> SignalType.SELL
             else -> SignalType.HOLD
         }
+    }
+
+    private fun scoreRSI(analysis: TechnicalAnalysis): Double = when (analysis.rsi.signal) {
+        RSI.Signal.OVERSOLD -> 2.0
+        RSI.Signal.BULLISH -> 1.0
+        RSI.Signal.BEARISH -> -1.0
+        RSI.Signal.OVERBOUGHT -> -2.0
+        RSI.Signal.NEUTRAL -> 0.0
+    }
+
+    private fun scoreMACD(analysis: TechnicalAnalysis): Double = when (analysis.macd.signal) {
+        MACD.Signal.BULLISH_CROSSOVER -> 2.0
+        MACD.Signal.BULLISH -> 1.0
+        MACD.Signal.BEARISH -> -1.0
+        MACD.Signal.BEARISH_CROSSOVER -> -2.0
+        MACD.Signal.NEUTRAL -> 0.0
+    }
+
+    private fun scoreTrend(analysis: TechnicalAnalysis): Double = when (analysis.trend) {
+        Trend.STRONG_UPTREND -> 1.5
+        Trend.UPTREND -> 0.5
+        Trend.STRONG_DOWNTREND -> -1.5
+        Trend.DOWNTREND -> -0.5
+        Trend.SIDEWAYS -> 0.0
+    }
+
+    private fun scoreCandlestickPattern(analysis: TechnicalAnalysis): Double {
+        val pattern = analysis.candlestickPattern ?: return 0.0
+        return if (pattern.bullish) pattern.strength else -pattern.strength
+    }
+
+    private fun applyVolumeConfidence(
+        analysis: TechnicalAnalysis,
+        buyScore: Double,
+        sellScore: Double
+    ): Pair<Double, Double> {
+        return when (analysis.volume.signal) {
+            VolumeAnalysis.Signal.HIGH_VOLUME,
+            VolumeAnalysis.Signal.ABOVE_AVERAGE -> {
+                if (buyScore > sellScore) Pair(buyScore + 0.5, sellScore)
+                else if (sellScore > buyScore) Pair(buyScore, sellScore + 0.5)
+                else Pair(buyScore, sellScore)
+            }
+            VolumeAnalysis.Signal.LOW_VOLUME,
+            VolumeAnalysis.Signal.BELOW_AVERAGE -> Pair(buyScore * 0.8, sellScore * 0.8)
+            else -> Pair(buyScore, sellScore)
+        }
+    }
+
+    private fun scoreBollinger(analysis: TechnicalAnalysis): Double {
+        val bb = analysis.bollingerBands ?: return 0.0
+        return when (bb.signal) {
+            BollingerBands.Signal.BELOW_LOWER -> 1.0
+            BollingerBands.Signal.NEAR_LOWER -> 0.5
+            BollingerBands.Signal.ABOVE_UPPER -> -1.0
+            BollingerBands.Signal.NEAR_UPPER -> -0.5
+            BollingerBands.Signal.MIDDLE -> 0.0
+        }
+    }
+
+    private fun applyADXConfidence(
+        analysis: TechnicalAnalysis,
+        buyScore: Double,
+        sellScore: Double
+    ): Pair<Double, Double> {
+        val adx = analysis.adx ?: return Pair(buyScore, sellScore)
+        return when (adx.signal) {
+            ADX.Signal.STRONG_TREND -> {
+                if (buyScore > sellScore) Pair(buyScore + 0.5, sellScore)
+                else Pair(buyScore, sellScore + 0.5)
+            }
+            ADX.Signal.WEAK_TREND -> Pair(buyScore * 0.85, sellScore * 0.85)
+            ADX.Signal.MODERATE_TREND -> Pair(buyScore, sellScore)
+        }
+    }
+
+    private fun scoreStochRSI(analysis: TechnicalAnalysis): Double {
+        val stoch = analysis.stochasticRSI ?: return 0.0
+        return when (stoch.signal) {
+            StochasticRSI.Signal.OVERSOLD -> 0.75
+            StochasticRSI.Signal.BULLISH -> 0.3
+            StochasticRSI.Signal.BEARISH -> -0.3
+            StochasticRSI.Signal.OVERBOUGHT -> -0.75
+            StochasticRSI.Signal.NEUTRAL -> 0.0
+        }
+    }
+
+    private fun applyMultiTimeframeFilter(
+        higherTimeframeTrends: List<Trend>,
+        buyScore: Double,
+        sellScore: Double
+    ): Pair<Double, Double> {
+        if (higherTimeframeTrends.isEmpty()) return Pair(buyScore, sellScore)
+        var adjustedBuy = buyScore
+        var adjustedSell = sellScore
+        for (htfTrend in higherTimeframeTrends) {
+            when (htfTrend) {
+                Trend.STRONG_DOWNTREND -> adjustedBuy -= 1.0
+                Trend.DOWNTREND -> adjustedBuy -= 0.5
+                Trend.STRONG_UPTREND -> adjustedSell -= 1.0
+                Trend.UPTREND -> adjustedSell -= 0.5
+                Trend.SIDEWAYS -> {}
+            }
+        }
+        return Pair(maxOf(adjustedBuy, 0.0), maxOf(adjustedSell, 0.0))
     }
 
     private fun calculateSentimentAdjustment(sentiment: FearGreedIndex?): Double {

@@ -3,6 +3,8 @@ package com.uscrooge.app.analysis
 import android.util.Log
 import com.google.gson.Gson
 import com.uscrooge.app.data.model.FearGreedIndex
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
@@ -35,7 +37,9 @@ class FearGreedService @Inject constructor(
                 .header("Accept", "application/json")
                 .build()
 
-            val response = client.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) {
+                client.newCall(request).execute()
+            }
             if (!response.isSuccessful) {
                 val body = response.body?.string() ?: "No body"
                 return Result.failure(Exception("Fear & Greed API error: ${response.code} - $body"))
@@ -70,7 +74,7 @@ class FearGreedService @Inject constructor(
             Log.d(TAG, "Fear & Greed Index: $value ($classification)")
             Result.success(index)
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch Fear & Greed Index", e)
+            Log.w(TAG, "Failed to fetch Fear & Greed Index: ${e::class.simpleName}: ${e.message}", e)
             if (cachedIndex != null) {
                 val cacheAgeSec = cacheAge / 1000
                 Log.i(TAG, "Returning cached Fear & Greed Index from ${cacheAgeSec}s ago")

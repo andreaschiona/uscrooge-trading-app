@@ -416,12 +416,13 @@ class TradingRepository @Inject constructor(
                 result.getOrNull()
             } else {
                 val error = result.exceptionOrNull()
-                Log.w(TAG, "Fear & Greed fetch failed: ${error?.message}", error)
+                val errorDetail = error?.let { "${it::class.simpleName}: ${it.message}" } ?: "Unknown"
+                Log.w(TAG, "Fear & Greed fetch failed: $errorDetail", error)
                 // Report to GitHub
                 try {
                     gitHubIssueReporter.reportError(
                         title = "Fear & Greed Index fetch failed",
-                        body = "Error: ${error?.message ?: "Unknown"}\n\nTimestamp: ${System.currentTimeMillis()}",
+                        body = "Error: $errorDetail\n\nTimestamp: ${System.currentTimeMillis()}\n\nStack trace:\n${error?.stackTraceToString() ?: "N/A"}",
                         labels = listOf("bug", "auto-reported", "sentiment")
                     )
                 } catch (e: Exception) {

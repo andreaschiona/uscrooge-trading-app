@@ -37,7 +37,7 @@ data class Position(
     fun calculateCurrentValue(currentPrice: Double): Position {
         val newCurrentValue = amount * currentPrice
         val newUnrealizedPnL = newCurrentValue - totalInvested
-        val newUnrealizedPnLPercent = (newUnrealizedPnL / totalInvested) * 100
+        val newUnrealizedPnLPercent = if (totalInvested > 0) (newUnrealizedPnL / totalInvested) * 100 else 0.0
         val newPeakPrice = maxOf(peakPrice, currentPrice)
 
         return copy(

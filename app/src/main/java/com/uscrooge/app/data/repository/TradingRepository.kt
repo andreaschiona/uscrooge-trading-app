@@ -424,7 +424,7 @@ class TradingRepository @Inject constructor(
                         body = "Error: ${error?.message ?: "Unknown"}\n\nTimestamp: ${System.currentTimeMillis()}",
                         labels = listOf("bug", "auto-reported", "sentiment")
                     )
-                } catch (_: Exception) { }
+                } catch (e: Exception) { }
                 null
             }
         } else null
@@ -683,7 +683,7 @@ class TradingRepository @Inject constructor(
                 if (suffix == "HOLD") continue
 
                 val base = krakenToBase[normalized] ?: normalized
-                if (base in configuredBases && base !in activeBases) {
+                if (base !in EUR_ASSETS && base !in activeBases) {
                     heldAssets[base] = (heldAssets[base] ?: 0.0) + amount
                 }
             }
@@ -705,8 +705,6 @@ class TradingRepository @Inject constructor(
 
                 for ((base, amount) in heldAssets) {
                     val pairSymbol = "$base/EUR"
-                    if (pairSymbol !in config.tradingPairs.map { it.uppercase() } &&
-                        pairSymbol !in config.tradingPairs) continue
                     activeBases.add(base)
 
                     val buyTrades = buyTradesByBase[base]

@@ -25,7 +25,8 @@ class FearGreedService @Inject constructor(
 
     suspend fun fetchFearGreedIndex(forceRefresh: Boolean = false): Result<FearGreedIndex> {
         val now = System.currentTimeMillis()
-        if (!forceRefresh && cachedIndex != null && (now - cacheTimestamp) < cacheTtlMs) {
+        val cacheAge = now - cacheTimestamp
+        if (!forceRefresh && cachedIndex != null && cacheAge < cacheTtlMs) {
             return Result.success(cachedIndex!!)
         }
 
@@ -67,7 +68,8 @@ class FearGreedService @Inject constructor(
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch Fear & Greed Index", e)
             if (cachedIndex != null) {
-                Log.i(TAG, "Returning cached Fear & Greed Index from ${(now - cacheTimestamp) / 1000}s ago")
+                val cacheAgeSec = cacheAge / 1000
+                Log.i(TAG, "Returning cached Fear & Greed Index from ${cacheAgeSec}s ago")
                 Result.success(cachedIndex!!)
             }
             Result.failure(e)

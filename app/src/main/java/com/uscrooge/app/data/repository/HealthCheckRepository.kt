@@ -8,12 +8,14 @@ import com.uscrooge.app.data.model.FearGreedHealth
 import com.uscrooge.app.data.model.SystemHealth
 import com.uscrooge.app.di.BrokerRegistry
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -60,20 +62,24 @@ class HealthCheckRepository @Inject constructor(
     }
 
     suspend fun checkAll() {
-        val config = configRepository.configFlow.first()
-        val healthMap = mutableMapOf<String, BrokerHealth>()
+        try {
+            val config = configRepository.configFlow.first()
+            val healthMap = mutableMapOf<String, BrokerHealth>()
 
-        for (broker in brokerRegistry.getActiveBrokers(config)) {
-            checkBroker(broker)?.let { healthMap[it.brokerName] = it }
+            for (broker in brokerRegistry.getActiveBrokers(config)) {
+                checkBroker(broker)?.let { healthMap[it.brokerName] = it }
+            }
+
+            val fearGreed = checkFearGreed()
+
+            _systemHealth.value = SystemHealth(
+                brokers = healthMap,
+                fearGreed = fearGreed,
+                lastUpdated = System.currentTimeMillis()
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Health check cycle failed: ${e.message}", e)
         }
-
-        val fearGreed = checkFearGreed()
-
-        _systemHealth.value = SystemHealth(
-            brokers = healthMap,
-            fearGreed = fearGreed,
-            lastUpdated = System.currentTimeMillis()
-        )
     }
 
     private suspend fun checkBroker(broker: BrokerApi): BrokerHealth? {
@@ -98,7 +104,9 @@ class HealthCheckRepository @Inject constructor(
                 .url(FEAR_GREED_URL)
                 .get()
                 .build()
-            val response = checkClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) {
+                checkClient.newCall(request).execute()
+            }
             val latency = System.currentTimeMillis() - startTime
 
             if (response.isSuccessful && response.body != null) {

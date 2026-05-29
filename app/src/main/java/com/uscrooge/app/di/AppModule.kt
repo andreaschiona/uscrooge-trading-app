@@ -16,6 +16,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,8 +39,12 @@ object AppModule {
     @Provides
     @Singleton
     @ApplicationScope
-    fun provideApplicationScope(): CoroutineScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun provideApplicationScope(): CoroutineScope {
+        val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+            android.util.Log.e("AppScope", "Unhandled coroutine exception", throwable)
+        }
+        return CoroutineScope(SupervisorJob() + Dispatchers.Default + exceptionHandler)
+    }
 
     @Provides
     @Singleton

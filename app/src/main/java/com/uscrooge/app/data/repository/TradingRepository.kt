@@ -196,7 +196,7 @@ class TradingRepository @Inject constructor(
         val localCurrentValue = positions.sumOf { it.currentValue }
 
         // Fetch balances from Kraken if crypto trading is enabled
-        val cryptoEnabled = config?.enableCryptoTrading == true && config.krakenApiKey.isNotBlank()
+        val cryptoEnabled = config?.krakenApiKey.isNullOrBlank().not()
         val krakenBalanceDeferred = if (cryptoEnabled) {
             async { krakenApiClient.getAccountBalance() }
         } else null
@@ -402,7 +402,7 @@ class TradingRepository @Inject constructor(
         val availableBalance = portfolio.availableBalance
 
         // Build crypto list: wishlist always included, supplemented by dynamic Kraken pairs
-        val cryptoPairsToAnalyze = if (config.enableCryptoTrading) {
+        val cryptoPairsToAnalyze = run {
             val quoteCurrency = config.tradingPairs.firstOrNull()
                 ?.substringAfter("/")?.uppercase() ?: "EUR"
             val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
@@ -414,8 +414,6 @@ class TradingRepository @Inject constructor(
                 .also { scanned ->
                     Log.d(TAG, "Analyzing ${scanned.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
                 }
-        } else {
-            emptyList()
         }
 
         for (pair in cryptoPairsToAnalyze) {

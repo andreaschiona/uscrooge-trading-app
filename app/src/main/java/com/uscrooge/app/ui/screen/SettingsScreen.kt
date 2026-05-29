@@ -329,31 +329,6 @@ fun SettingsScreen(
                 item {
                     SettingsSection(title = "Kraken API (Crypto)") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Enable Crypto Trading",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = "Trade crypto via Kraken",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = currentConfig.enableCryptoTrading,
-                                    onCheckedChange = { checked ->
-                                        editedConfig = currentConfig.copy(enableCryptoTrading = checked)
-                                    }
-                                )
-                            }
-
                             OutlinedTextField(
                                 value = currentConfig.krakenApiKey,
                                 onValueChange = { value ->

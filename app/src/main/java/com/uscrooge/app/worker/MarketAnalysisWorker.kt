@@ -69,8 +69,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
 
             // Sync positions from both brokers
             try {
-                if (config.enableCryptoTrading &&
-                    config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
+                if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
                     repository.syncOpenPositionsFromKraken(config)
                 }
             } catch (e: Exception) {

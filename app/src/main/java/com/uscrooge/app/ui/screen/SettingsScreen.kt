@@ -318,6 +318,51 @@ fun SettingsScreen(
                     }
                 }
 
+                // Sentiment Analysis
+                item {
+                    SettingsSection(title = "Sentiment Analysis") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Enable Sentiment",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "Fetch Fear & Greed Index from alternative.me",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = currentConfig.sentimentEnabled,
+                                    onCheckedChange = { checked ->
+                                        editedConfig = currentConfig.copy(sentimentEnabled = checked)
+                                    }
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = (currentConfig.sentimentWeight * 100).toString(),
+                                onValueChange = { value ->
+                                    value.toDoubleOrNull()?.let {
+                                        editedConfig = currentConfig.copy(sentimentWeight = it / 100)
+                                    }
+                                },
+                                label = { Text("Sentiment Weight (%)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth(),
+                                supportingText = { Text("How much sentiment influences signals (0-20%)") }
+                            )
+                        }
+                    }
+                }
+
                 // Notifications
                 item {
                     SettingsSection(title = "Notifications") {

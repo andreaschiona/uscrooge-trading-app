@@ -71,6 +71,10 @@ data class TradingConfig(
     val notifyOnExecution: Boolean = true,
     val notifyOnErrors: Boolean = true,
 
+    // Sentiment analysis (Fear & Greed Index)
+    val sentimentEnabled: Boolean = false,
+    val sentimentWeight: Double = 0.10,              // 10% weight in signal decision
+
     // Circuit breaker
     val circuitBreakerEnabled: Boolean = true,
     val maxDailyDrawdownPercent: Double = 5.0,    // Halt trading if daily loss > 5%

@@ -6,11 +6,14 @@ import com.uscrooge.app.MockBrokerApi
 import com.uscrooge.app.TestDataFactory
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
+import com.uscrooge.app.analysis.FearGreedService
+import com.uscrooge.app.analysis.SentimentAnalyzer
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
 import io.mockk.*
@@ -31,6 +34,9 @@ class TradingRepositoryTest {
     private val positionDao: PositionDao = mockk()
     private val strategy: TradingStrategy = mockk()
     private val gson = Gson()
+    private val fearGreedService: FearGreedService = mockk()
+    private val sentimentAnalyzer: SentimentAnalyzer = mockk()
+    private val gitHubIssueReporter: GitHubIssueReporter = mockk()
 
     private lateinit var repository: TradingRepository
 
@@ -61,7 +67,10 @@ class TradingRepositoryTest {
             orderDao = orderDao,
             positionDao = positionDao,
             strategy = strategy,
-            gson = gson
+            gson = gson,
+            fearGreedService = fearGreedService,
+            sentimentAnalyzer = sentimentAnalyzer,
+            gitHubIssueReporter = gitHubIssueReporter
         )
     }
 

@@ -13,7 +13,8 @@ data class TechnicalAnalysis(
     val resistance: Double?,
     val bollingerBands: BollingerBands? = null,
     val adx: ADX? = null,
-    val stochasticRSI: StochasticRSI? = null
+    val stochasticRSI: StochasticRSI? = null,
+    val sentiment: FearGreedIndex? = null
 )
 
 data class RSI(
@@ -155,6 +156,29 @@ data class ADX(
         MODERATE_TREND,  // ADX 20-25
         WEAK_TREND       // ADX < 20, ranging market
     }
+}
+
+data class FearGreedIndex(
+    val value: Int,
+    val classification: String,
+    val timestamp: Long
+) {
+    enum class SentimentLevel {
+        EXTREME_FEAR,
+        FEAR,
+        NEUTRAL,
+        GREED,
+        EXTREME_GREED
+    }
+
+    val level: SentimentLevel
+        get() = when {
+            value <= 24 -> SentimentLevel.EXTREME_FEAR
+            value <= 44 -> SentimentLevel.FEAR
+            value <= 55 -> SentimentLevel.NEUTRAL
+            value <= 75 -> SentimentLevel.GREED
+            else -> SentimentLevel.EXTREME_GREED
+        }
 }
 
 data class StochasticRSI(

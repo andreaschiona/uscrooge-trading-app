@@ -64,6 +64,12 @@ class HealthCheckRepository @Inject constructor(
     suspend fun checkAll() {
         try {
             val config = configRepository.configFlow.first()
+
+            // Apply config to brokers before health check to avoid a race condition
+            // where credentials haven't been set on broker clients yet
+            // (HealthCheckRepository.start() can run before BrokerRegistry.applyConfig()).
+            brokerRegistry.applyConfig(config)
+
             val healthMap = mutableMapOf<String, BrokerHealth>()
 
             for (broker in brokerRegistry.getActiveBrokers(config)) {

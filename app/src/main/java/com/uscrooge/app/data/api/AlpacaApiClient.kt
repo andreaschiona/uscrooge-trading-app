@@ -144,10 +144,6 @@ class AlpacaApiClient(
         okHttpClientCache?.let { client ->
             if (sharedOkHttp == null) {
                 try {
-                    client.dispatcher.executorService.shutdown()
-                } catch (_: Exception) {
-                }
-                try {
                     client.connectionPool.evictAll()
                 } catch (_: Exception) {
                 }

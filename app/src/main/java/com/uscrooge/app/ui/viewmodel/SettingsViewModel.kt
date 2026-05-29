@@ -84,20 +84,23 @@ class SettingsViewModel @Inject constructor(
                     currentConfig.githubToken.trim() != normalizedConfig.githubToken.trim()
 
                 if (credentialsChanged) {
-                    val credentialsValidation = validateKrakenCredentials(normalizedConfig)
-                    when (credentialsValidation.status) {
-                        CredentialsValidationStatus.INVALID -> {
-                            _saveState.value = SaveState.Error(
-                                credentialsValidation.message
-                                    ?: "Kraken credentials validation failed"
-                            )
-                            return@launch
-                        }
+                    // Validate Kraken credentials if crypto trading is enabled
+                    if (normalizedConfig.enableCryptoTrading) {
+                        val credentialsValidation = validateKrakenCredentials(normalizedConfig)
+                        when (credentialsValidation.status) {
+                            CredentialsValidationStatus.INVALID -> {
+                                _saveState.value = SaveState.Error(
+                                    credentialsValidation.message
+                                        ?: "Kraken credentials validation failed"
+                                )
+                                return@launch
+                            }
 
-                        CredentialsValidationStatus.UNVERIFIED -> {
-                        }
+                            CredentialsValidationStatus.UNVERIFIED -> {
+                            }
 
-                        CredentialsValidationStatus.VALID -> Unit
+                            CredentialsValidationStatus.VALID -> Unit
+                        }
                     }
 
                     // Also validate Alpaca credentials if stock trading is enabled

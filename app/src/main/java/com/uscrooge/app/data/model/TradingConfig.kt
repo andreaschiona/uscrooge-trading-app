@@ -33,6 +33,7 @@ data class TradingConfig(
     val useLimitOrders: Boolean = true,        // Use limit orders for non-urgent signals
 
     // API Configuration - Kraken (Crypto)
+    val enableCryptoTrading: Boolean = true,
     val krakenApiKey: String = "",
     val krakenApiSecret: String = "",
     val apiTimeout: Long = 30000,              // 30 seconds

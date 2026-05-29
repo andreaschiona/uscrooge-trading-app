@@ -37,7 +37,9 @@ class DashboardViewModel @Inject constructor(
                 val config = configRepository.configFlow.first()
 
                 // Sync positions from both brokers
-                repository.syncOpenPositionsFromKraken(config)
+                if (config.enableCryptoTrading) {
+                    repository.syncOpenPositionsFromKraken(config)
+                }
                 if (config.enableStockTrading && config.alpacaApiKey.isNotBlank()) {
                     repository.syncOpenPositionsFromAlpaca(config)
                 }

@@ -58,7 +58,8 @@ class BrokerRegistry @Inject constructor(
      */
     fun getActiveBrokers(config: TradingConfig): List<BrokerApi> {
         val brokers = mutableListOf<BrokerApi>()
-        if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
+        if (config.enableCryptoTrading &&
+            config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) {
             brokers.add(krakenApiClient)
         }
         if (config.enableStockTrading &&
@@ -78,7 +79,8 @@ class BrokerRegistry @Inject constructor(
         val quote = pair.substringAfter("/").uppercase()
         return when (quote) {
             "EUR" -> {
-                if (config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) krakenApiClient else null
+                if (config.enableCryptoTrading &&
+                    config.krakenApiKey.isNotBlank() && config.krakenApiSecret.isNotBlank()) krakenApiClient else null
             }
             "USD" -> {
                 if (config.enableStockTrading &&

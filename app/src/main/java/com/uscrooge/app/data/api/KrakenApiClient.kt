@@ -47,6 +47,9 @@ class KrakenApiClient(
     @Volatile
     private var cachedPairDecimals: Map<String, Int> = emptyMap()
 
+    @Volatile
+    private var cachedLotDecimals: Map<String, Int> = emptyMap()
+
     companion object {
         private const val PAIRS_CACHE_MS = 60 * 60 * 1000L // 1 hour
         // Kraken requires strictly-increasing nonces per API key. Unit is
@@ -419,6 +422,7 @@ class KrakenApiClient(
                     val info = body.result.values.firstOrNull()
                     if (info != null) {
                         cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
+                        cachedLotDecimals = cachedLotDecimals + (krakenSymbol to info.lot_decimals)
                         return info.pair_decimals
                     }
                 }
@@ -426,6 +430,27 @@ class KrakenApiClient(
             2
         } catch (e: Exception) {
             2
+        }
+    }
+
+    private suspend fun getLotDecimals(krakenSymbol: String): Int {
+        cachedLotDecimals[krakenSymbol]?.let { return it }
+        return try {
+            val response = getApiService().getAssetPairs(pair = krakenSymbol)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isEmpty() && body.result != null) {
+                    val info = body.result.values.firstOrNull()
+                    if (info != null) {
+                        cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
+                        cachedLotDecimals = cachedLotDecimals + (krakenSymbol to info.lot_decimals)
+                        return info.lot_decimals
+                    }
+                }
+            }
+            8
+        } catch (e: Exception) {
+            8
         }
     }
 
@@ -444,12 +469,14 @@ class KrakenApiClient(
                 val decimals = getPairDecimals(krakenPair)
                 String.format(Locale.US, "%.${decimals}f", it)
             }
+            val lotDecimals = getLotDecimals(krakenPair)
+            val formattedVolume = String.format(Locale.US, "%.${lotDecimals}f", volume)
 
             val response = getApiService().addOrder(
                 nonce = nonce,
                 ordertype = orderType.toKrakenString(),
                 type = type.name.lowercase(),
-                volume = volume.toString(),
+                volume = formattedVolume,
                 pair = krakenPair,
                 price = formattedPrice,
                 validate = validate

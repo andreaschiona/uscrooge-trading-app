@@ -527,10 +527,10 @@ fun HealthDetailsDialog(systemHealth: SystemHealth, onDismiss: () -> Unit) {
                     BrokerHealthRow(health)
                 }
                 if (systemHealth.fearGreed != null) {
-                    Divider()
+                    HorizontalDivider()
                     FearGreedRow(systemHealth.fearGreed)
                 }
-                Divider()
+                HorizontalDivider()
                 Text(
                     text = "Last updated: ${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(systemHealth.lastUpdated))}",
                     style = MaterialTheme.typography.labelSmall,

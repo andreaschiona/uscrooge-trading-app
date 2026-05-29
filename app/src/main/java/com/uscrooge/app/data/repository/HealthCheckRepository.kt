@@ -104,8 +104,9 @@ class HealthCheckRepository @Inject constructor(
             if (response.isSuccessful && response.body != null) {
                 val bodyStr = response.body!!.string()
                 val json = gson.fromJson(bodyStr, Map::class.java)
-                val data = (json["data"] as? List<Map<String, String>>)?.firstOrNull()
-                val value = data?.get("value")?.toIntOrNull()
+                @Suppress("UNCHECKED_CAST")
+                val data = (json["data"] as? List<Map<String, Any>>)?.firstOrNull()
+                val value = data?.get("value")?.toString()?.toIntOrNull()
 
                 val status = when {
                     latency > SLOW_THRESHOLD_MS -> BrokerHealthStatus.SLOW

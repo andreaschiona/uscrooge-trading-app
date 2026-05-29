@@ -424,7 +424,9 @@ class TradingRepository @Inject constructor(
                         body = "Error: ${error?.message ?: "Unknown"}\n\nTimestamp: ${System.currentTimeMillis()}",
                         labels = listOf("bug", "auto-reported", "sentiment")
                     )
-                } catch (e: Exception) { }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to report sentiment error to GitHub", e)
+                }
                 null
             }
         } else null

@@ -1,6 +1,7 @@
 package com.uscrooge.app.strategy
 
 import com.google.gson.Gson
+import com.uscrooge.app.analysis.SentimentAnalyzer
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.model.*
 import javax.inject.Inject
@@ -15,7 +16,8 @@ data class SignalResult(
 
 @Singleton
 class TradingStrategy @Inject constructor(
-    private val analyzer: TechnicalAnalyzer
+    private val analyzer: TechnicalAnalyzer,
+    private val sentimentAnalyzer: SentimentAnalyzer
 ) {
 
     @Volatile
@@ -35,10 +37,13 @@ class TradingStrategy @Inject constructor(
         currentPrice: Double,
         currentPositions: List<Position> = emptyList(),
         availableBalance: Double = 0.0,
-        higherTimeframeTrends: List<Trend> = emptyList()
+        higherTimeframeTrends: List<Trend> = emptyList(),
+        sentiment: FearGreedIndex? = null
     ): SignalResult {
         // Perform technical analysis
-        val analysis = analyzer.analyze(pair, ohlcData, currentPrice, config)
+        val analysis = analyzer.analyze(pair, ohlcData, currentPrice, config).copy(
+            sentiment = sentiment
+        )
 
         if (config.useVolumeAnalysis && analysis.volume.volumeRatio < config.minVolumeRatio) {
             return SignalResult(signal = null, analysis = analysis)
@@ -48,7 +53,7 @@ class TradingStrategy @Inject constructor(
         val strength = SignalStrength.calculate(analysis)
 
         // Determine signal type
-        val signalType = determineSignalType(strength, analysis, higherTimeframeTrends)
+        val signalType = determineSignalType(strength, analysis, higherTimeframeTrends, sentiment)
 
         // Check if we should generate a signal
         if (signalType == SignalType.HOLD || strength.overall < config.minSignalStrength) {
@@ -131,7 +136,8 @@ class TradingStrategy @Inject constructor(
     private fun determineSignalType(
         strength: SignalStrength,
         analysis: TechnicalAnalysis,
-        higherTimeframeTrends: List<Trend> = emptyList()
+        higherTimeframeTrends: List<Trend> = emptyList(),
+        sentiment: FearGreedIndex? = null
     ): SignalType {
         var buyScore = 0.0
         var sellScore = 0.0
@@ -242,6 +248,15 @@ class TradingStrategy @Inject constructor(
             // Clamp to zero
             if (buyScore < 0) buyScore = 0.0
             if (sellScore < 0) sellScore = 0.0
+        }
+
+        if (config.sentimentEnabled && sentiment != null) {
+            val modifier = sentimentAnalyzer.calculateSentimentModifier(sentiment)
+            if (modifier > 0) {
+                buyScore += modifier * config.sentimentWeight * 10
+            } else if (modifier < 0) {
+                sellScore += abs(modifier) * config.sentimentWeight * 10
+            }
         }
 
         return when {
@@ -427,6 +442,13 @@ class TradingStrategy @Inject constructor(
         }
         analysis.resistance?.let {
             reasons.add("Resistance level at ${String.format("%.2f", it)}")
+        }
+
+        // Sentiment
+        if (config.sentimentEnabled) {
+            analysis.sentiment?.let { fg ->
+                reasons.add(sentimentAnalyzer.describeSentiment(fg))
+            }
         }
 
         // Overall strength

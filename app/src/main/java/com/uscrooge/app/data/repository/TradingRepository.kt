@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.uscrooge.app.analysis.FearGreedService
+import com.uscrooge.app.analysis.SentimentAnalyzer
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.BrokerApi
@@ -13,6 +15,7 @@ import com.uscrooge.app.data.local.PositionDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,7 +39,10 @@ class TradingRepository @Inject constructor(
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
     private val strategy: TradingStrategy,
-    private val gson: Gson
+    private val gson: Gson,
+    private val fearGreedService: FearGreedService,
+    private val sentimentAnalyzer: SentimentAnalyzer,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) {
     companion object {
         private const val TAG = "TradingRepository"
@@ -291,7 +297,8 @@ class TradingRepository @Inject constructor(
         pair: String,
         config: TradingConfig,
         availableBalance: Double,
-        broker: BrokerApi
+        broker: BrokerApi,
+        sentiment: FearGreedIndex? = null
     ): Result<SignalResult> {
         return try {
             val tradingPair = TradingPair.fromString(pair)
@@ -327,7 +334,8 @@ class TradingRepository @Inject constructor(
                 currentPrice = currentPrice,
                 currentPositions = currentPositions,
                 availableBalance = availableBalance,
-                higherTimeframeTrends = higherTimeframeTrends
+                higherTimeframeTrends = higherTimeframeTrends,
+                sentiment = sentiment
             )
 
             signalResult.signal?.let { newSignal ->
@@ -401,6 +409,26 @@ class TradingRepository @Inject constructor(
         val portfolio = getPortfolio(config)
         val availableBalance = portfolio.availableBalance
 
+        // Fetch Fear & Greed Index once per cycle (if enabled)
+        val globalSentiment = if (config.sentimentEnabled) {
+            val result = fearGreedService.fetchFearGreedIndex()
+            if (result.isSuccess) {
+                result.getOrNull()
+            } else {
+                val error = result.exceptionOrNull()
+                Log.w(TAG, "Fear & Greed fetch failed: ${error?.message}", error)
+                // Report to GitHub
+                try {
+                    gitHubIssueReporter.reportError(
+                        title = "Fear & Greed Index fetch failed",
+                        body = "Error: ${error?.message ?: "Unknown"}\n\nTimestamp: ${System.currentTimeMillis()}",
+                        labels = listOf("bug", "auto-reported", "sentiment")
+                    )
+                } catch (_: Exception) { }
+                null
+            }
+        } else null
+
         // Build crypto list: wishlist always included, supplemented by dynamic Kraken pairs
         val cryptoPairsToAnalyze = run {
             val quoteCurrency = config.tradingPairs.firstOrNull()
@@ -418,7 +446,7 @@ class TradingRepository @Inject constructor(
 
         for (pair in cryptoPairsToAnalyze) {
             try {
-                val result = analyzePairAndGenerateSignal(pair, config, availableBalance, krakenApiClient)
+                val result = analyzePairAndGenerateSignal(pair, config, availableBalance, krakenApiClient, sentiment = globalSentiment)
                 if (result.isSuccess) {
                     val signalResult = result.getOrNull()!!
                     signalResult.signal?.let { signals.add(it) }
@@ -497,7 +525,7 @@ class TradingRepository @Inject constructor(
                 for (symbol in stocksToAnalyze) {
                     val pair = "$symbol/USD"
                     try {
-                        val result = analyzePairAndGenerateSignal(pair, config, availableBalance, alpacaApiClient)
+                        val result = analyzePairAndGenerateSignal(pair, config, availableBalance, alpacaApiClient, sentiment = globalSentiment)
                         if (result.isSuccess) {
                             val signalResult = result.getOrNull()!!
                             signalResult.signal?.let { signals.add(it) }

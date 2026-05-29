@@ -71,6 +71,8 @@ class ConfigRepository(private val context: Context) {
         private val MAX_CONSECUTIVE_FAILURES = intPreferencesKey("max_consecutive_failures")
         private val CIRCUIT_BREAKER_COOLDOWN_MINUTES = intPreferencesKey("circuit_breaker_cooldown_minutes")
         private val USE_DARK_MODE = booleanPreferencesKey("use_dark_mode")
+        private val SENTIMENT_ENABLED = booleanPreferencesKey("sentiment_enabled")
+        private val SENTIMENT_WEIGHT = doublePreferencesKey("sentiment_weight")
         private val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
@@ -129,6 +131,8 @@ class ConfigRepository(private val context: Context) {
                 maxDailyDrawdownPercent = preferences[MAX_DAILY_DRAWDOWN_PERCENT] ?: 5.0,
                 maxConsecutiveFailures = preferences[MAX_CONSECUTIVE_FAILURES] ?: 3,
                 circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60,
+                sentimentEnabled = preferences[SENTIMENT_ENABLED] ?: false,
+                sentimentWeight = preferences[SENTIMENT_WEIGHT] ?: 0.10,
                 githubToken = decryptApiKey(preferences[GITHUB_TOKEN] ?: "")
             )
         }
@@ -178,6 +182,8 @@ class ConfigRepository(private val context: Context) {
             preferences[MAX_DAILY_DRAWDOWN_PERCENT] = config.maxDailyDrawdownPercent
             preferences[MAX_CONSECUTIVE_FAILURES] = config.maxConsecutiveFailures
             preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] = config.circuitBreakerCooldownMinutes
+            preferences[SENTIMENT_ENABLED] = config.sentimentEnabled
+            preferences[SENTIMENT_WEIGHT] = config.sentimentWeight
             preferences[GITHUB_TOKEN] = encryptApiKey(config.githubToken)
         }
     }

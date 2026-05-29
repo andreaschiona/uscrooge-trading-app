@@ -376,45 +376,83 @@ class AlpacaApiClient(
         return try {
             acquireDataRateLimit()
             val normalizedSymbol = normalizeSymbol(symbol)
-            val response = getDataApiService().getLatestTrade(normalizedSymbol)
+            val tradeResult = parseLatestTrade(normalizedSymbol)
 
-            if (response.isSuccessful && response.body() != null) {
-                val trade = response.body()!!.trade
-                if (trade == null) {
-                    val errorMsg = "no trade data for $normalizedSymbol"
-                    Log.w(TAG, "getTicker failed for $symbol: $errorMsg")
-                    return Result.failure(Exception("Alpaca ticker error: $errorMsg"))
-                }
-                val quoteResponse = getDataApiService().getLatestQuote(normalizedSymbol)
-                val quote = if (quoteResponse.isSuccessful) quoteResponse.body()?.quote else null
-
-                val lastPrice = trade.p
-                val bid = quote?.bp ?: lastPrice
-                val ask = quote?.ap ?: lastPrice
-
-                Result.success(
-                    Ticker(
-                        pair = symbol,
-                        ask = ask,
-                        bid = bid,
-                        lastTrade = lastPrice,
-                        volume = trade.s.toDouble(),
-                        volumeWeightedAverage = lastPrice,
-                        numberOfTrades = 1,
-                        low = lastPrice,
-                        high = lastPrice,
-                        opening = lastPrice
-                    )
-                )
-            } else {
-                val errorMsg = extractErrorMessage(response)
-                Log.w(TAG, "getTicker failed for $symbol: $errorMsg")
-                Result.failure(Exception("Alpaca ticker error: $errorMsg"))
+            if (tradeResult.isFailure) {
+                val error = tradeResult.exceptionOrNull()!!
+                Log.w(TAG, "getTicker trade parse failed for $symbol: ${error.message}")
+                return Result.failure(Exception("Alpaca ticker error: ${error.message}"))
             }
+
+            val (lastPrice, volume) = tradeResult.getOrNull()!!
+
+            val quoteResponse = getDataApiService().getLatestQuote(normalizedSymbol)
+            val quote = if (quoteResponse.isSuccessful && quoteResponse.body() != null) {
+                parseLatestQuote(quoteResponse.body()!!.string())
+            } else {
+                null
+            }
+
+            val bid = quote?.bid ?: lastPrice
+            val ask = quote?.ask ?: lastPrice
+
+            Result.success(
+                Ticker(
+                    pair = symbol,
+                    ask = ask,
+                    bid = bid,
+                    lastTrade = lastPrice,
+                    volume = volume,
+                    volumeWeightedAverage = lastPrice,
+                    numberOfTrades = 1,
+                    low = lastPrice,
+                    high = lastPrice,
+                    opening = lastPrice
+                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "getTicker exception for $symbol: ${e.message}", e)
             val errorMsg = e.message ?: "${e.javaClass.simpleName}: null"
             Result.failure(Exception("Alpaca ticker error: $errorMsg"))
+        }
+    }
+
+    private suspend fun parseLatestTrade(symbol: String): Result<Pair<Double, Double>> {
+        return try {
+            val response = getDataApiService().getLatestTrade(symbol)
+            if (!response.isSuccessful) {
+                return Result.failure(Exception(extractErrorMessage(response)))
+            }
+            val body = response.body() ?: return Result.failure(Exception("empty response body"))
+            val jsonString = body.string()
+            val root = Gson().fromJson(jsonString, JsonElement::class.java).asJsonObject
+
+            val tradeObj = root.getAsJsonObject("trade")
+                ?: return Result.failure(Exception("no trade data for $symbol"))
+
+            val price = tradeObj.get("p")?.asDouble
+                ?: return Result.failure(Exception("no trade price for $symbol"))
+            val size = tradeObj.get("s")?.asInt ?: 0
+            val volume = size.toDouble()
+
+            Result.success(price to volume)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private data class ParsedQuote(val bid: Double, val ask: Double)
+
+    private fun parseLatestQuote(jsonString: String): ParsedQuote? {
+        return try {
+            val root = Gson().fromJson(jsonString, JsonElement::class.java).asJsonObject
+            val quoteObj = root.getAsJsonObject("quote") ?: return null
+            val bid = quoteObj.get("bp")?.asDouble ?: return null
+            val ask = quoteObj.get("ap")?.asDouble ?: return null
+            ParsedQuote(bid, ask)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse quote response: ${e.message}")
+            null
         }
     }
 

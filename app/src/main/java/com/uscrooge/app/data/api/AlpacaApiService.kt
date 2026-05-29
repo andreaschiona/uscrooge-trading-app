@@ -58,13 +58,13 @@ interface AlpacaApiService {
     suspend fun getLatestQuote(
         @Path("symbol") symbol: String,
         @Query("feed") feed: String = "iex"
-    ): Response<AlpacaLatestQuoteResponse>
+    ): Response<ResponseBody>
 
     @GET("v2/stocks/{symbol}/trades/latest")
     suspend fun getLatestTrade(
         @Path("symbol") symbol: String,
         @Query("feed") feed: String = "iex"
-    ): Response<AlpacaLatestTradeResponse>
+    ): Response<ResponseBody>
 
     // Clock (market hours)
     @GET("v2/clock")
@@ -203,39 +203,6 @@ data class AlpacaBar(
     val v: Long,    // volume
     val n: Int,     // number of trades
     val vw: Double? // vwap
-)
-
-data class AlpacaLatestQuoteResponse(
-    val symbol: String,
-    val quote: AlpacaQuote
-)
-
-data class AlpacaQuote(
-    val t: String,
-    val ax: String,
-    val ap: Double,
-    @com.google.gson.annotations.SerializedName("as")
-    val askSize: Int,
-    val bx: String,
-    val bp: Double,
-    val bs: Int,
-    val c: List<String>,
-    val z: String
-)
-
-data class AlpacaLatestTradeResponse(
-    val symbol: String,
-    val trade: AlpacaTrade
-)
-
-data class AlpacaTrade(
-    val t: String,
-    val x: String,
-    val p: Double,
-    val s: Int,
-    val c: List<String>,
-    val i: Long,
-    val z: String
 )
 
 // Clock

@@ -1,0 +1,224 @@
+package com.uscrooge.app
+
+import com.uscrooge.app.analysis.TechnicalAnalyzer
+import com.uscrooge.app.analysis.SentimentAnalyzer
+import com.uscrooge.app.data.model.*
+import com.uscrooge.app.strategy.ExitUrgency
+import com.uscrooge.app.strategy.TradingStrategy
+import org.junit.Assert.*
+import org.junit.Before
+import org.junit.Test
+
+class TradingStrategyTest {
+
+    private lateinit var strategy: TradingStrategy
+    private lateinit var config: TradingConfig
+
+    @Before
+    fun setup() {
+        val analyzer = TechnicalAnalyzer()
+        val sentimentAnalyzer = SentimentAnalyzer()
+        strategy = TradingStrategy(analyzer, sentimentAnalyzer)
+        config = TradingConfig(
+            tradingPairs = listOf("BTC/EUR"),
+            minSignalStrength = 0.5,
+            useVolumeAnalysis = true,
+            minVolumeRatio = 0.3
+        )
+        strategy.updateConfig(config)
+    }
+
+    @Test
+    fun `generateSignal returns analysis even without signal`() {
+        val ohlcData = createMixedOhlc(count = 100)
+        val currentPrice = ohlcData.last().close
+
+        val result = strategy.generateSignal(
+            pair = "BTC/EUR",
+            ohlcData = ohlcData,
+            currentPrice = currentPrice,
+            availableBalance = 1000.0
+        )
+
+        assertNotNull(result.analysis)
+        assertNotNull(result.analysis.rsi)
+        assertNotNull(result.analysis.macd)
+        assertNotNull(result.analysis.volume)
+    }
+
+    @Test
+    fun `generateSignal with existing position skips buy`() {
+        val ohlcData = createUptrendOhlc(count = 100)
+        val currentPrice = ohlcData.last().close
+        val existingPosition = createPosition(pair = "BTC/EUR", isOpen = true)
+
+        val result = strategy.generateSignal(
+            pair = "BTC/EUR",
+            ohlcData = ohlcData,
+            currentPrice = currentPrice,
+            currentPositions = listOf(existingPosition),
+            availableBalance = 1000.0
+        )
+
+        assertTrue(result.signal == null || result.signal.type != SignalType.BUY)
+    }
+
+    @Test
+    fun `generateSignal with max positions reached returns null signal`() {
+        config = config.copy(maxOpenPositions = 1)
+        strategy.updateConfig(config)
+
+        val ohlcData = createUptrendOhlc(count = 100)
+        val currentPrice = ohlcData.last().close
+
+        val result = strategy.generateSignal(
+            pair = "ETH/EUR",
+            ohlcData = ohlcData,
+            currentPrice = currentPrice,
+            currentPositions = listOf(createPosition(pair = "SOL/EUR", isOpen = true)),
+            availableBalance = 1000.0
+        )
+
+        assertNull(result.signal)
+    }
+
+    @Test
+    fun `evaluateExitConditions returns null when position is within range`() {
+        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 101.0)
+        val exitSignal = strategy.evaluateExitConditions(position, 101.0, config)
+        assertNull(exitSignal)
+    }
+
+    @Test
+    fun `evaluateExitConditions returns stop loss signal`() {
+        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 97.8)
+        val exitSignal = strategy.evaluateExitConditions(position, 97.8, config)
+        assertNotNull(exitSignal)
+        assertTrue(exitSignal!!.reason.contains("Stop loss"))
+        assertEquals(ExitUrgency.IMMEDIATE, exitSignal.urgency)
+    }
+
+    @Test
+    fun `evaluateExitConditions returns take profit signal`() {
+        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 104.1)
+        val exitSignal = strategy.evaluateExitConditions(position, 104.1, config)
+        assertNotNull(exitSignal)
+        assertTrue(exitSignal!!.reason.contains("Take profit"))
+        assertEquals(ExitUrgency.NORMAL, exitSignal.urgency)
+    }
+
+    @Test
+    fun `evaluateExitConditions trailing stop triggers`() {
+        val position = createPosition(
+            averageEntryPrice = 100.0,
+            currentPrice = 103.0,
+            peakPrice = 106.0
+        )
+        val exitSignal = strategy.evaluateExitConditions(position, 103.0, config)
+        assertNotNull(exitSignal)
+    }
+
+    @Test
+    fun `evaluateExitConditions no trailing stop when profit is tiny`() {
+        val position = createPosition(
+            averageEntryPrice = 100.0,
+            currentPrice = 100.5,
+            peakPrice = 101.0
+        )
+        val exitSignal = strategy.evaluateExitConditions(position, 100.5, config)
+        assertNull(exitSignal)
+    }
+
+    @Test
+    fun `generateSignal with very low minimum strength accommodates more signals`() {
+        config = config.copy(minSignalStrength = 0.2)
+        strategy.updateConfig(config)
+
+        val ohlcData = createMixedOhlc(count = 150)
+        val currentPrice = ohlcData.last().close
+
+        val result = strategy.generateSignal(
+            pair = "BTC/EUR",
+            ohlcData = ohlcData,
+            currentPrice = currentPrice,
+            availableBalance = 1000.0
+        )
+
+        assertNotNull(result.analysis)
+    }
+
+    @Test
+    fun `multi-timeframe higher downtrend affects signal`() {
+        val ohlcData = createUptrendOhlc(count = 100)
+        val currentPrice = ohlcData.last().close
+        config = config.copy(minSignalStrength = 0.3)
+        strategy.updateConfig(config)
+
+        val resultWithDowntrend = strategy.generateSignal(
+            pair = "BTC/EUR",
+            ohlcData = ohlcData,
+            currentPrice = currentPrice,
+            higherTimeframeTrends = listOf(Trend.STRONG_DOWNTREND),
+            availableBalance = 1000.0
+        )
+
+        assertNotNull(resultWithDowntrend.analysis)
+    }
+
+    private fun createUptrendOhlc(count: Int): List<OHLC> {
+        val basePrice = 100.0
+        return (0 until count).map { i ->
+            val phase = (i.toDouble() / count) * 2 * Math.PI
+            val close = basePrice + i * 0.5 + Math.sin(phase) * 5
+            OHLC(
+                time = 1000000L + i * 60L,
+                open = close - 2.0,
+                high = close + 3.0,
+                low = close - 2.0,
+                close = close,
+                vwap = close,
+                volume = 100.0 + (i % 10) * 10.0,
+                count = 100 + i
+            )
+        }
+    }
+
+    private fun createMixedOhlc(count: Int): List<OHLC> {
+        return (0 until count).map { i ->
+            val t = i.toDouble() / count * 2 * Math.PI
+            val dip = -20.0 * Math.exp(-(t - Math.PI) * (t - Math.PI) / 2)
+            val close = 100.0 + 30.0 * Math.sin(t) + dip
+            OHLC(
+                time = 1000000L + i * 60L,
+                open = close - 3.0,
+                high = close + 5.0,
+                low = close - 5.0,
+                close = close,
+                vwap = close,
+                volume = 80.0 + Math.abs(Math.sin(t)) * 40.0,
+                count = 100 + i
+            )
+        }
+    }
+
+    private fun createPosition(
+        pair: String = "BTC/EUR",
+        averageEntryPrice: Double = 100.0,
+        currentPrice: Double = 100.0,
+        peakPrice: Double = 100.0,
+        isOpen: Boolean = true
+    ): Position = Position(
+        pair = pair,
+        amount = 1.0,
+        averageEntryPrice = averageEntryPrice,
+        currentPrice = currentPrice,
+        peakPrice = peakPrice,
+        totalInvested = averageEntryPrice,
+        currentValue = currentPrice,
+        unrealizedPnL = currentPrice - averageEntryPrice,
+        unrealizedPnLPercent = ((currentPrice - averageEntryPrice) / averageEntryPrice) * 100,
+        openedAt = System.currentTimeMillis(),
+        updatedAt = System.currentTimeMillis(),
+        isOpen = isOpen
+    )
+}

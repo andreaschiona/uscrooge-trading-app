@@ -3,6 +3,7 @@ package com.uscrooge.app
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.di.ApplicationScope
 import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.executor.OrderExecutor
@@ -27,6 +28,9 @@ class UScroogeApplication : Application(), Configuration.Provider {
     lateinit var orderExecutor: OrderExecutor
 
     @Inject
+    lateinit var healthCheckRepository: HealthCheckRepository
+
+    @Inject
     @ApplicationScope
     lateinit var appScope: CoroutineScope
 
@@ -35,6 +39,8 @@ class UScroogeApplication : Application(), Configuration.Provider {
         // Start observing config changes so KrakenApiClient credentials,
         // TradingStrategy and OrderExecutor stay in sync with Settings.
         brokerRegistry.start(appScope, tradingStrategy, orderExecutor)
+        // Start periodic health checks for broker connections.
+        healthCheckRepository.start(appScope)
     }
 
     override val workManagerConfiguration: Configuration

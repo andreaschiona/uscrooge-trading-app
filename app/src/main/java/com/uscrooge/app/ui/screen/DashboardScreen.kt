@@ -1,11 +1,14 @@
 package com.uscrooge.app.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.*
@@ -19,7 +22,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import com.uscrooge.app.data.model.BrokerHealth
+import com.uscrooge.app.data.model.BrokerHealthStatus
+import com.uscrooge.app.data.model.FearGreedHealth
 import com.uscrooge.app.data.model.Position
+import com.uscrooge.app.data.model.SystemHealth
 import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.ui.viewmodel.DashboardUiState
 import com.uscrooge.app.ui.viewmodel.DashboardViewModel
@@ -132,6 +139,15 @@ fun DashboardContent(
     val equityData = remember(portfolio) { viewModel.generateEquityCurve(portfolio) }
     val allocationSlices = remember(portfolio) { viewModel.generateAllocationSlices(portfolio) }
     val drawdownData = remember(portfolio) { viewModel.generateDrawdownData(portfolio) }
+    val systemHealth by viewModel.systemHealth.collectAsState()
+    var showHealthDialog by remember { mutableStateOf(false) }
+
+    if (showHealthDialog) {
+        HealthDetailsDialog(
+            systemHealth = systemHealth,
+            onDismiss = { showHealthDialog = false }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -149,10 +165,13 @@ fun DashboardContent(
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold
                 )
-                FilledTonalButton(onClick = onRefresh) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Refresh")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SystemHealthIndicator(systemHealth = systemHealth, onClick = { showHealthDialog = true })
+                    FilledTonalButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Refresh")
+                    }
                 }
             }
         }
@@ -473,6 +492,163 @@ fun InfoItem(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+fun SystemHealthIndicator(systemHealth: SystemHealth, onClick: () -> Unit) {
+    val allOnline = systemHealth.brokers.values.all { it.status == BrokerHealthStatus.ONLINE }
+    val anyOffline = systemHealth.brokers.values.any { it.status == BrokerHealthStatus.OFFLINE }
+    val indicatorColor = when {
+        systemHealth.brokers.isEmpty() -> Color.Gray
+        anyOffline -> Color(0xFFE57373)
+        !allOnline -> Color(0xFFFFD54F)
+        else -> Color(0xFF4CAF50)
+    }
+
+    IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(indicatorColor, CircleShape)
+        )
+    }
+}
+
+@Composable
+fun HealthDetailsDialog(systemHealth: SystemHealth, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("System Health") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                systemHealth.brokers.forEach { (name, health) ->
+                    BrokerHealthRow(health)
+                }
+                if (systemHealth.fearGreed != null) {
+                    Divider()
+                    FearGreedRow(systemHealth.fearGreed)
+                }
+                Divider()
+                Text(
+                    text = "Last updated: ${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(systemHealth.lastUpdated))}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun BrokerHealthRow(health: BrokerHealth) {
+    val statusColor = when (health.status) {
+        BrokerHealthStatus.ONLINE -> Color(0xFF4CAF50)
+        BrokerHealthStatus.SLOW -> Color(0xFFFFD54F)
+        BrokerHealthStatus.OFFLINE -> Color(0xFFE57373)
+    }
+    val statusLabel = when (health.status) {
+        BrokerHealthStatus.ONLINE -> "Online"
+        BrokerHealthStatus.SLOW -> "Slow"
+        BrokerHealthStatus.OFFLINE -> "Offline"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(statusColor, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = health.brokerName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "${health.latencyMs}ms · $statusLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (health.lastError != null) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = "Error",
+                tint = Color(0xFFE57373),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+    if (health.lastError != null) {
+        Text(
+            text = health.lastError,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFE57373),
+            modifier = Modifier.padding(start = 18.dp, top = 2.dp)
+        )
+    }
+}
+
+@Composable
+fun FearGreedRow(health: FearGreedHealth) {
+    val statusColor = when (health.status) {
+        BrokerHealthStatus.ONLINE -> Color(0xFF4CAF50)
+        BrokerHealthStatus.SLOW -> Color(0xFFFFD54F)
+        BrokerHealthStatus.OFFLINE -> Color(0xFFE57373)
+    }
+    val statusLabel = when (health.status) {
+        BrokerHealthStatus.ONLINE -> "Online"
+        BrokerHealthStatus.SLOW -> "Slow"
+        BrokerHealthStatus.OFFLINE -> "Offline"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(statusColor, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(text = "Fear & Greed", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                val valueText = health.value?.let { "$it/100" } ?: "N/A"
+                Text(
+                    text = "$valueText · ${health.latencyMs}ms · $statusLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (health.lastError != null) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = "Error",
+                tint = Color(0xFFE57373),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+    if (health.lastError != null) {
+        Text(
+            text = health.lastError,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFFE57373),
+            modifier = Modifier.padding(start = 18.dp, top = 2.dp)
         )
     }
 }

@@ -8,9 +8,6 @@
 # Keep GitHubIssueReporter DTOs for release parsing
 -keep class com.uscrooge.app.integration.GitHubIssueReporter$* { *; }
 
-# Keep FearGreedService inner DTOs for Gson deserialization (private inner classes)
--keep class com.uscrooge.app.analysis.FearGreedService$* { *; }
-
 # Keep Kraken API DTOs for release parsing
 -keep class com.uscrooge.app.data.api.KrakenResponse { *; }
 -keep class com.uscrooge.app.data.api.ServerTime { *; }

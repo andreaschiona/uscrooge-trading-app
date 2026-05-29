@@ -2,7 +2,6 @@ package com.uscrooge.app.analysis
 
 import android.util.Log
 import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.uscrooge.app.data.model.FearGreedIndex
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,27 +42,32 @@ class FearGreedService @Inject constructor(
             }
 
             val json = response.body?.string() ?: return Result.failure(Exception("Empty response"))
-            val apiResponse = gson.fromJson(json, FearGreedApiResponse::class.java)
-
-            if (apiResponse?.data.isNullOrEmpty()) {
+            val root = gson.fromJson(json, Map::class.java)
+            @Suppress("UNCHECKED_CAST")
+            val dataList = root?.get("data") as? List<Map<String, Any>>
+            if (dataList.isNullOrEmpty()) {
                 return Result.failure(Exception("No data in Fear & Greed response"))
             }
 
-            val entry = apiResponse.data.first()
-            val value = entry.value.toIntOrNull()
+            val entry = dataList.first()
+            val rawValue = entry["value"]?.toString()
+            val value = rawValue?.toIntOrNull()
             if (value == null) {
-                return Result.failure(Exception("Invalid value in Fear & Greed response: ${entry.value}"))
+                return Result.failure(Exception("Invalid value in Fear & Greed response: $rawValue"))
             }
+
+            val classification = entry["value_classification"]?.toString() ?: ""
+            val timestamp = entry["timestamp"]?.toString()?.toLongOrNull() ?: (now / 1000)
 
             val index = FearGreedIndex(
                 value = value,
-                classification = entry.valueClassification,
-                timestamp = entry.timestamp.toLongOrNull() ?: (now / 1000)
+                classification = classification,
+                timestamp = timestamp
             )
 
             cachedIndex = index
             cacheTimestamp = now
-            Log.d(TAG, "Fear & Greed Index: $value (${entry.valueClassification})")
+            Log.d(TAG, "Fear & Greed Index: $value ($classification)")
             Result.success(index)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch Fear & Greed Index", e)
@@ -75,16 +79,4 @@ class FearGreedService @Inject constructor(
             Result.failure(e)
         }
     }
-
-    private data class FearGreedApiResponse(
-        val name: String? = null,
-        val data: List<FearGreedDataEntry> = emptyList()
-    )
-
-    private data class FearGreedDataEntry(
-        val value: String = "",
-        @SerializedName("value_classification")
-        val valueClassification: String = "",
-        val timestamp: String = ""
-    )
 }

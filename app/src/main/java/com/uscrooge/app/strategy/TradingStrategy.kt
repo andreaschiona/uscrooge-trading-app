@@ -250,13 +250,11 @@ class TradingStrategy @Inject constructor(
             if (sellScore < 0) sellScore = 0.0
         }
 
-        if (config.sentimentEnabled && sentiment != null) {
-            val modifier = sentimentAnalyzer.calculateSentimentModifier(sentiment)
-            if (modifier > 0) {
-                buyScore += modifier * config.sentimentWeight * 10
-            } else if (modifier < 0) {
-                sellScore += abs(modifier) * config.sentimentWeight * 10
-            }
+        val sentimentAdjustment = calculateSentimentAdjustment(sentiment)
+        if (sentimentAdjustment > 0) {
+            buyScore += sentimentAdjustment
+        } else if (sentimentAdjustment < 0) {
+            sellScore += abs(sentimentAdjustment)
         }
 
         return when {
@@ -264,6 +262,11 @@ class TradingStrategy @Inject constructor(
             sellScore > buyScore && sellScore >= 2.5 -> SignalType.SELL
             else -> SignalType.HOLD
         }
+    }
+
+    private fun calculateSentimentAdjustment(sentiment: FearGreedIndex?): Double {
+        if (!config.sentimentEnabled || sentiment == null) return 0.0
+        return sentimentAnalyzer.calculateSentimentModifier(sentiment) * config.sentimentWeight * 10
     }
 
     private fun calculatePriceTargets(

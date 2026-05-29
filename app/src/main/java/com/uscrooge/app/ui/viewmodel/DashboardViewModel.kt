@@ -47,10 +47,9 @@ class DashboardViewModel @Inject constructor(
                     repository.syncOpenPositionsFromAlpaca(config)
                 }
 
-                repository.getOpenPositions().collect { positions ->
-                    val portfolio = repository.getPortfolio(config)
-                    _uiState.value = DashboardUiState.Success(portfolio, positions)
-                }
+                val positions = repository.getOpenPositions().first()
+                val portfolio = repository.getPortfolio(config)
+                _uiState.value = DashboardUiState.Success(portfolio, positions)
             } catch (e: Exception) {
                 _uiState.value = DashboardUiState.Error(e.message ?: "Unknown error")
             }
@@ -127,7 +126,7 @@ class DashboardViewModel @Inject constructor(
 
     fun generatePriceHistory(position: Position): List<Float> {
         val days = 30
-        val basePrice = position.averageEntryPrice
+        val basePrice = if (position.averageEntryPrice > 0.0) position.averageEntryPrice else position.currentPrice
         return (0 until days).map { i ->
             val variation = (Math.sin(i * 0.3) * 0.02 + (position.currentPrice - basePrice) / basePrice * (i.toFloat() / days))
             (basePrice * (1 + variation)).toFloat()

@@ -18,6 +18,15 @@ class MockBrokerApi(
     var getOrderResult: Result<BrokerOrderInfo> = Result.failure(Exception("Not mocked"))
     var getOpenOrdersResult: Result<List<BrokerOrderInfo>> = Result.failure(Exception("Not mocked"))
     var getOpenPositionsResult: Result<List<BrokerPositionInfo>> = Result.failure(Exception("Not mocked"))
+    var healthResult: Result<BrokerHealth> = Result.success(
+        BrokerHealth(
+            brokerName = brokerName,
+            status = BrokerHealthStatus.ONLINE,
+            latencyMs = 50,
+            lastError = null,
+            lastChecked = System.currentTimeMillis()
+        )
+    )
 
     var lastPlaceOrderSymbol: String? = null
     var lastPlaceOrderSide: OrderSide? = null
@@ -55,6 +64,8 @@ class MockBrokerApi(
     override suspend fun getOrder(orderId: String): Result<BrokerOrderInfo> = getOrderResult
     override suspend fun getOpenOrders(): Result<List<BrokerOrderInfo>> = getOpenOrdersResult
     override suspend fun getOpenPositions(): Result<List<BrokerPositionInfo>> = getOpenPositionsResult
+
+    override suspend fun health(): Result<BrokerHealth> = healthResult
 
     override fun updateCredentials(apiKey: String, apiSecret: String, timeout: Long) {}
     override fun close() {}

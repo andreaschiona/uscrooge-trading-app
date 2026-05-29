@@ -322,6 +322,50 @@ class AlpacaApiClient(
         }
     }
 
+    override suspend fun health(): Result<BrokerHealth> {
+        val startTime = System.currentTimeMillis()
+        return try {
+            val result = getAccountBalance()
+            val latency = System.currentTimeMillis() - startTime
+            if (result.isSuccess) {
+                val status = when {
+                    latency > 2000 -> BrokerHealthStatus.SLOW
+                    else -> BrokerHealthStatus.ONLINE
+                }
+                Result.success(
+                    BrokerHealth(
+                        brokerName = brokerName,
+                        status = status,
+                        latencyMs = latency,
+                        lastError = null,
+                        lastChecked = startTime
+                    )
+                )
+            } else {
+                Result.success(
+                    BrokerHealth(
+                        brokerName = brokerName,
+                        status = BrokerHealthStatus.OFFLINE,
+                        latencyMs = latency,
+                        lastError = result.exceptionOrNull()?.message,
+                        lastChecked = startTime
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            val latency = System.currentTimeMillis() - startTime
+            Result.success(
+                BrokerHealth(
+                    brokerName = brokerName,
+                    status = BrokerHealthStatus.OFFLINE,
+                    latencyMs = latency,
+                    lastError = e.message,
+                    lastChecked = startTime
+                )
+            )
+        }
+    }
+
     override suspend fun getTicker(symbol: String): Result<Ticker> {
         if (!isMarketOpen()) {
             return Result.failure(Exception("US stock market is currently closed"))

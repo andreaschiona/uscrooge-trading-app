@@ -37,6 +37,9 @@ interface BrokerApi {
     // Positions
     suspend fun getOpenPositions(): Result<List<BrokerPositionInfo>>
 
+    // Health
+    suspend fun health(): Result<BrokerHealth>
+
     // Utility
     fun updateCredentials(apiKey: String, apiSecret: String, timeout: Long = 30000)
     fun close()

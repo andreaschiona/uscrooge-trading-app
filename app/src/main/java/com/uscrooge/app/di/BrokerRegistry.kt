@@ -35,7 +35,6 @@ class BrokerRegistry @Inject constructor(
     private val gson: Gson? = null,
     private val okHttpClient: OkHttpClient? = null
 ) {
-
     val krakenApiClient: KrakenApiClient = KrakenApiClient(
         apiKey = "",
         apiSecret = "",

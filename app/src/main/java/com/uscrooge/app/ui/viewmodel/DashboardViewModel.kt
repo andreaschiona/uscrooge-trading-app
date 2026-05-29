@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.data.model.Position
+import com.uscrooge.app.data.model.SystemHealth
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.ui.screen.PieSlice
 import com.uscrooge.app.ui.screen.presetColors
@@ -19,11 +21,14 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: TradingRepository,
-    private val configRepository: ConfigRepository
+    private val configRepository: ConfigRepository,
+    private val healthCheckRepository: HealthCheckRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    val systemHealth: StateFlow<SystemHealth> = healthCheckRepository.systemHealth
 
     init {
         loadDashboard()

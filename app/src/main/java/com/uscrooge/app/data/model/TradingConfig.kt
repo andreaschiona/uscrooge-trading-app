@@ -75,6 +75,21 @@ data class TradingConfig(
     val sentimentEnabled: Boolean = false,
     val sentimentWeight: Double = 0.10,              // 10% weight in signal decision
 
+    // Kelly Criterion
+    val useKellyCriterion: Boolean = false,
+    val kellyFraction: Double = 0.5,                 // Fractional Kelly (half-Kelly default)
+
+    // Volatility-based sizing
+    val volatilityAdjustment: Boolean = false,
+
+    // Correlation-based exposure limits
+    val maxCorrelationExposure: Double = 0.4,        // Max 40% on correlated assets
+
+    // Pyramiding
+    val pyramidingEnabled: Boolean = false,
+    val maxPyramidingLevels: Int = 2,
+    val pyramidingIncrementPercent: Double = 0.5,    // 50% of initial size per add
+
     // Circuit breaker
     val circuitBreakerEnabled: Boolean = true,
     val maxDailyDrawdownPercent: Double = 5.0,    // Halt trading if daily loss > 5%

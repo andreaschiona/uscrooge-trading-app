@@ -128,6 +128,12 @@ interface TradeJournalDao {
 
     @Query("SELECT pair, COUNT(*) as tradeCount, AVG(profitLossPercent) as avgPnLPercent FROM trade_journal GROUP BY pair ORDER BY avgPnLPercent DESC")
     fun getPairStatistics(): Flow<List<PairTradeStats>>
+
+    @Query("SELECT COUNT(*) FROM trade_journal WHERE pair = :pair AND profitLoss > 0")
+    suspend fun getWinCountByPair(pair: String): Int
+
+    @Query("SELECT COUNT(*) FROM trade_journal WHERE pair = :pair")
+    suspend fun getTotalTradeCountByPair(pair: String): Int
 }
 
 data class PairTradeStats(

@@ -2,8 +2,10 @@ package com.uscrooge.app.backtest
 
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.analysis.SentimentAnalyzer
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.strategy.TradingStrategy
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -18,7 +20,8 @@ class BacktestEngineTest {
     fun setup() {
         val analyzer = TechnicalAnalyzer()
         val sentimentAnalyzer = SentimentAnalyzer()
-        strategy = TradingStrategy(analyzer, sentimentAnalyzer)
+        val tradeJournalDao = mockk<TradeJournalDao>(relaxed = true)
+        strategy = TradingStrategy(analyzer, sentimentAnalyzer, tradeJournalDao)
         engine = BacktestEngine(analyzer, strategy)
     }
 

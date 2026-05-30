@@ -96,6 +96,11 @@ data class TradingConfig(
     val maxConsecutiveFailures: Int = 3,           // Halt after 3 consecutive failures
     val circuitBreakerCooldownMinutes: Int = 60,   // Wait 60 min before resuming
 
+    // App update check
+    val updateCheckIntervalHours: Int = 4,
+    val lastUpdateCheckEpoch: Long = 0L,
+    val lastAvailableVersion: String = "",
+
     // Update timestamp
     val lastUpdated: Long = System.currentTimeMillis()
 ) {

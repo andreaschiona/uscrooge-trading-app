@@ -34,6 +34,7 @@ import com.uscrooge.app.ui.viewmodel.SettingsViewModel
 import com.uscrooge.app.ui.viewmodel.SignalsViewModel
 import com.uscrooge.app.ui.viewmodel.TradeJournalViewModel
 import com.uscrooge.app.worker.MarketAnalysisWorker
+import com.uscrooge.app.worker.UpdateCheckWorker
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -84,6 +85,9 @@ class MainActivity : ComponentActivity() {
             val config = configRepository.configFlow.first()
             val intervalMinutes = (config.checkIntervalSeconds / 60).toLong()
             MarketAnalysisWorker.schedule(this@MainActivity, intervalMinutes)
+
+            val updateIntervalHours = config.updateCheckIntervalHours.toLong()
+            UpdateCheckWorker.schedule(this@MainActivity, updateIntervalHours)
         }
     }
 }

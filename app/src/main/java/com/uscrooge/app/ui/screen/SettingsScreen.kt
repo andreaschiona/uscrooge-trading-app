@@ -370,6 +370,78 @@ fun SettingsScreen(
                     }
                 }
 
+                // App Updates
+                item {
+                    SettingsSection(title = "App Updates") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = currentConfig.updateCheckIntervalHours.toString(),
+                                onValueChange = { value ->
+                                    value.toIntOrNull()?.let {
+                                        editedConfig = currentConfig.copy(updateCheckIntervalHours = it)
+                                    }
+                                },
+                                label = { Text("Check Interval (hours)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                supportingText = { Text("How often to check for updates (default: 4h)") }
+                            )
+
+                            val lastAvailable = currentConfig.lastAvailableVersion
+                            if (lastAvailable.isNotBlank()) {
+                                Text(
+                                    text = "Latest available: $lastAvailable",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.checkForUpdates() },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = viewModel.updateCheckState.value !is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking
+                            ) {
+                                if (viewModel.updateCheckState.value is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Text("Check Now")
+                            }
+
+                            val state = viewModel.updateCheckState.value
+                            if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Available) {
+                                Text(
+                                    text = "Update ${state.version} available!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = state.releaseNotes.take(300),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 5
+                                )
+                            } else if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate) {
+                                Text(
+                                    text = "You have the latest version",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Error) {
+                                Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // API Configuration - Kraken (Crypto)
                 item {
                     SettingsSection(title = "Kraken API (Crypto)") {

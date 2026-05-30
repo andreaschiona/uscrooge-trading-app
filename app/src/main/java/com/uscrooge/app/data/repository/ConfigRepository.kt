@@ -73,6 +73,9 @@ class ConfigRepository(private val context: Context) {
         private val USE_DARK_MODE = booleanPreferencesKey("use_dark_mode")
         private val SENTIMENT_ENABLED = booleanPreferencesKey("sentiment_enabled")
         private val SENTIMENT_WEIGHT = doublePreferencesKey("sentiment_weight")
+        private val UPDATE_CHECK_INTERVAL_HOURS = intPreferencesKey("update_check_interval_hours")
+        private val LAST_UPDATE_CHECK_EPOCH = longPreferencesKey("last_update_check_epoch")
+        private val LAST_AVAILABLE_VERSION = stringPreferencesKey("last_available_version")
         private val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
@@ -133,6 +136,9 @@ class ConfigRepository(private val context: Context) {
                 circuitBreakerCooldownMinutes = preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] ?: 60,
                 sentimentEnabled = preferences[SENTIMENT_ENABLED] ?: false,
                 sentimentWeight = preferences[SENTIMENT_WEIGHT] ?: 0.10,
+                updateCheckIntervalHours = preferences[UPDATE_CHECK_INTERVAL_HOURS] ?: 4,
+                lastUpdateCheckEpoch = preferences[LAST_UPDATE_CHECK_EPOCH] ?: 0L,
+                lastAvailableVersion = preferences[LAST_AVAILABLE_VERSION] ?: "",
                 githubToken = decryptApiKey(preferences[GITHUB_TOKEN] ?: "")
             )
         }
@@ -184,6 +190,9 @@ class ConfigRepository(private val context: Context) {
             preferences[CIRCUIT_BREAKER_COOLDOWN_MINUTES] = config.circuitBreakerCooldownMinutes
             preferences[SENTIMENT_ENABLED] = config.sentimentEnabled
             preferences[SENTIMENT_WEIGHT] = config.sentimentWeight
+            preferences[UPDATE_CHECK_INTERVAL_HOURS] = config.updateCheckIntervalHours
+            preferences[LAST_UPDATE_CHECK_EPOCH] = config.lastUpdateCheckEpoch
+            preferences[LAST_AVAILABLE_VERSION] = config.lastAvailableVersion
             preferences[GITHUB_TOKEN] = encryptApiKey(config.githubToken)
         }
     }

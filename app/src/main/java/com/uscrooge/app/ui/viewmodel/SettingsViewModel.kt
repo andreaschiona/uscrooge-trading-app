@@ -9,6 +9,7 @@ import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.update.UpdateChecker
 import com.uscrooge.app.worker.MarketAnalysisWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +27,8 @@ import javax.net.ssl.SSLException
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val configRepository: ConfigRepository,
-    private val gitHubIssueReporter: GitHubIssueReporter
+    private val gitHubIssueReporter: GitHubIssueReporter,
+    private val updateChecker: UpdateChecker
 ) : ViewModel() {
 
     private enum class CredentialsValidationStatus {
@@ -45,6 +47,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _saveState = MutableStateFlow<SaveState>(SaveState.Idle)
     val saveState: StateFlow<SaveState> = _saveState.asStateFlow()
+
+    private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
+    val updateCheckState: StateFlow<UpdateCheckState> = _updateCheckState.asStateFlow()
 
     init {
         loadConfig()
@@ -367,6 +372,30 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            _updateCheckState.value = UpdateCheckState.Checking
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                updateChecker.checkForUpdate()
+            }
+            result.onSuccess { checkResult ->
+                if (checkResult.isUpdateAvailable) {
+                    _updateCheckState.value = UpdateCheckState.Available(
+                        version = checkResult.latestVersion,
+                        downloadUrl = checkResult.downloadUrl,
+                        releaseNotes = checkResult.releaseNotes
+                    )
+                } else {
+                    _updateCheckState.value = UpdateCheckState.UpToDate
+                }
+            }.onFailure { error ->
+                _updateCheckState.value = UpdateCheckState.Error(
+                    error.message ?: "Failed to check for updates"
+                )
+            }
+        }
+    }
+
     fun resetToDefaults() {
         viewModelScope.launch {
             try {
@@ -394,4 +423,12 @@ sealed class SaveState {
     data class Success(val message: String) : SaveState()
     data class Warning(val message: String) : SaveState()
     data class Error(val message: String) : SaveState()
+}
+
+sealed class UpdateCheckState {
+    object Idle : UpdateCheckState()
+    object Checking : UpdateCheckState()
+    object UpToDate : UpdateCheckState()
+    data class Available(val version: String, val downloadUrl: String, val releaseNotes: String) : UpdateCheckState()
+    data class Error(val message: String) : UpdateCheckState()
 }

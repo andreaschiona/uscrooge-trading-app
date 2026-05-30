@@ -11,6 +11,7 @@ import com.uscrooge.app.data.local.TradingDatabase
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.update.UpdateChecker
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -83,6 +84,10 @@ object AppModule {
     fun provideGitHubIssueReporter(
         @ApplicationContext context: Context
     ): GitHubIssueReporter = GitHubIssueReporter(context)
+
+    @Provides
+    @Singleton
+    fun provideUpdateChecker(): UpdateChecker = UpdateChecker()
 }
 
 @Module

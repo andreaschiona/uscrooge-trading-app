@@ -25,27 +25,37 @@ class NotificationHelper @Inject constructor(
         private const val CHANNEL_ID = "trading_signals"
         private const val CHANNEL_NAME = "Trading Signals"
         private const val CHANNEL_DESCRIPTION = "Notifications for trading signals and order execution"
+        private const val UPDATE_CHANNEL_ID = "app_updates"
+        private const val UPDATE_CHANNEL_NAME = "App Updates"
+        private const val UPDATE_CHANNEL_DESCRIPTION = "Notifications for new app versions"
 
         private const val SIGNAL_NOTIFICATION_ID_BASE = 1000
         private const val ORDER_NOTIFICATION_ID_BASE = 2000
         private const val ERROR_NOTIFICATION_ID = 9999
+        private const val UPDATE_NOTIFICATION_ID = 8000
     }
 
     init {
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val importance = NotificationManager.IMPORTANCE_HIGH
-            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, importance).apply {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
                 description = CHANNEL_DESCRIPTION
                 enableVibration(true)
                 enableLights(true)
             }
-
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+
+            val updateChannel = NotificationChannel(UPDATE_CHANNEL_ID, UPDATE_CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
+                description = UPDATE_CHANNEL_DESCRIPTION
+                enableVibration(true)
+                enableLights(true)
+            }
+            notificationManager.createNotificationChannel(updateChannel)
         }
     }
 
@@ -133,6 +143,41 @@ class NotificationHelper @Inject constructor(
                 ORDER_NOTIFICATION_ID_BASE + order.orderId.hashCode(),
                 notification
             )
+        }
+    }
+
+    fun sendUpdateNotification(latestVersion: String, downloadUrl: String, releaseNotes: String?) {
+        val intent = Intent(context, com.uscrooge.app.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("update_download_url", downloadUrl)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            UPDATE_NOTIFICATION_ID,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val message = buildString {
+            append("Version $latestVersion is available")
+            if (!releaseNotes.isNullOrBlank()) {
+                append("\n\n${releaseNotes.take(200)}")
+            }
+        }
+
+        val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
+            .setSmallIcon(com.uscrooge.app.R.drawable.ic_launcher_foreground)
+            .setContentTitle("App Update Available")
+            .setContentText("Version $latestVersion is available")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            NotificationManagerCompat.from(context).notify(UPDATE_NOTIFICATION_ID, notification)
         }
     }
 

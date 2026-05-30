@@ -89,7 +89,13 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    MainScreen(configRepository = configRepository)
+                    val navigateToSettings = remember {
+                        intent?.getBooleanExtra("navigate_to_settings", false) == true
+                    }
+                    MainScreen(
+                        configRepository = configRepository,
+                        navigateToSettings = navigateToSettings
+                    )
                 }
             }
         }
@@ -109,8 +115,20 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(configRepository: ConfigRepository) {
+fun MainScreen(configRepository: ConfigRepository, navigateToSettings: Boolean = false) {
     val navController = rememberNavController()
+
+    LaunchedEffect(navigateToSettings) {
+        if (navigateToSettings) {
+            navController.navigate(Screen.Settings.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {

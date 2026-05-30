@@ -28,6 +28,16 @@ fun SettingsScreen(
     val config by viewModel.config.collectAsState()
     val saveState by viewModel.saveState.collectAsState()
     val updateCheckState by viewModel.updateCheckState.collectAsState()
+    val downloadState by viewModel.downloadState.collectAsState()
+
+    LaunchedEffect(downloadState) {
+        if (downloadState is com.uscrooge.app.ui.viewmodel.DownloadState.Success ||
+            downloadState is com.uscrooge.app.ui.viewmodel.DownloadState.Error
+        ) {
+            kotlinx.coroutines.delay(3000)
+            viewModel.resetDownloadState()
+        }
+    }
 
     var editedConfig by remember { mutableStateOf<TradingConfig?>(null) }
 
@@ -440,6 +450,41 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 5
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = { viewModel.downloadUpdate(availableState.downloadUrl) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = downloadState !is com.uscrooge.app.ui.viewmodel.DownloadState.Downloading
+                                ) {
+                                    if (downloadState is com.uscrooge.app.ui.viewmodel.DownloadState.Downloading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Downloading...")
+                                    } else {
+                                        Text("Download & Install")
+                                    }
+                                }
+                                when (val ds = downloadState) {
+                                    is com.uscrooge.app.ui.viewmodel.DownloadState.Success -> {
+                                        Text(
+                                            text = "Installation started",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    is com.uscrooge.app.ui.viewmodel.DownloadState.Error -> {
+                                        Text(
+                                            text = ds.message,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    else -> {}
+                                }
                             } else if (updateCheckState is com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate) {
                                 val upToDateState = updateCheckState as com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate
                                 Text(

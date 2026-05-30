@@ -43,7 +43,9 @@ class UpdateCheckWorker @AssistedInject constructor(
                 configRepository.updateConfig(
                     config.copy(
                         lastUpdateCheckEpoch = now,
-                        lastAvailableVersion = checkResult.latestVersion
+                        lastAvailableVersion = checkResult.latestVersion,
+                        lastDownloadUrl = checkResult.downloadUrl,
+                        lastReleaseNotes = checkResult.releaseNotes
                     )
                 )
                 if (checkResult.isUpdateAvailable) {

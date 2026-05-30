@@ -77,6 +77,8 @@ class ConfigRepository(private val context: Context) {
         private val UPDATE_CHECK_INTERVAL_HOURS = intPreferencesKey("update_check_interval_hours")
         private val LAST_UPDATE_CHECK_EPOCH = longPreferencesKey("last_update_check_epoch")
         private val LAST_AVAILABLE_VERSION = stringPreferencesKey("last_available_version")
+        private val LAST_DOWNLOAD_URL = stringPreferencesKey("last_download_url")
+        private val LAST_RELEASE_NOTES = stringPreferencesKey("last_release_notes")
         private val GITHUB_TOKEN = stringPreferencesKey("github_token")
     }
 
@@ -141,6 +143,8 @@ class ConfigRepository(private val context: Context) {
                 updateCheckIntervalHours = preferences[UPDATE_CHECK_INTERVAL_HOURS] ?: 4,
                 lastUpdateCheckEpoch = preferences[LAST_UPDATE_CHECK_EPOCH] ?: 0L,
                 lastAvailableVersion = preferences[LAST_AVAILABLE_VERSION] ?: "",
+                lastDownloadUrl = preferences[LAST_DOWNLOAD_URL] ?: "",
+                lastReleaseNotes = preferences[LAST_RELEASE_NOTES] ?: "",
                 githubToken = decryptApiKey(preferences[GITHUB_TOKEN] ?: "")
             )
         }
@@ -196,6 +200,8 @@ class ConfigRepository(private val context: Context) {
             preferences[UPDATE_CHECK_INTERVAL_HOURS] = config.updateCheckIntervalHours
             preferences[LAST_UPDATE_CHECK_EPOCH] = config.lastUpdateCheckEpoch
             preferences[LAST_AVAILABLE_VERSION] = config.lastAvailableVersion
+            preferences[LAST_DOWNLOAD_URL] = config.lastDownloadUrl
+            preferences[LAST_RELEASE_NOTES] = config.lastReleaseNotes
             preferences[GITHUB_TOKEN] = encryptApiKey(config.githubToken)
         }
     }

@@ -11,6 +11,7 @@ import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.update.UpdateChecker
+import com.uscrooge.app.update.UpdateDownloader
 import com.uscrooge.app.worker.MarketAnalysisWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,9 @@ class SettingsViewModel @Inject constructor(
     private val _updateCheckState = MutableStateFlow<UpdateCheckState>(UpdateCheckState.Idle)
     val updateCheckState: StateFlow<UpdateCheckState> = _updateCheckState.asStateFlow()
 
+    private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
+    val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
+
     init {
         loadConfig()
     }
@@ -60,6 +64,17 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             configRepository.configFlow.collect { config ->
                 _config.value = config
+                if (config.lastDownloadUrl.isNotBlank() && config.lastAvailableVersion.isNotBlank()) {
+                    if (_updateCheckState.value !is UpdateCheckState.Available &&
+                        _updateCheckState.value !is UpdateCheckState.Checking
+                    ) {
+                        _updateCheckState.value = UpdateCheckState.Available(
+                            version = config.lastAvailableVersion,
+                            downloadUrl = config.lastDownloadUrl,
+                            releaseNotes = config.lastReleaseNotes
+                        )
+                    }
+                }
             }
         }
     }
@@ -386,7 +401,9 @@ class SettingsViewModel @Inject constructor(
                     configRepository.updateConfig(
                         config.copy(
                             lastUpdateCheckEpoch = now,
-                            lastAvailableVersion = checkResult.latestVersion
+                            lastAvailableVersion = checkResult.latestVersion,
+                            lastDownloadUrl = checkResult.downloadUrl,
+                            lastReleaseNotes = checkResult.releaseNotes
                         )
                     )
                 }
@@ -416,6 +433,24 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun downloadUpdate(downloadUrl: String) {
+        viewModelScope.launch {
+            _downloadState.value = DownloadState.Downloading
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                UpdateDownloader(context).downloadAndInstall(downloadUrl)
+            }
+            result.onSuccess {
+                _downloadState.value = DownloadState.Success
+            }.onFailure { error ->
+                _downloadState.value = DownloadState.Error(error.message ?: "Download failed")
+            }
+        }
+    }
+
+    fun resetDownloadState() {
+        _downloadState.value = DownloadState.Idle
     }
 
     fun resetToDefaults() {
@@ -467,4 +502,11 @@ sealed class UpdateCheckState {
     data class UpToDate(val lastCheckDate: Long = System.currentTimeMillis()) : UpdateCheckState()
     data class Available(val version: String, val downloadUrl: String, val releaseNotes: String) : UpdateCheckState()
     data class Error(val message: String) : UpdateCheckState()
+}
+
+sealed class DownloadState {
+    object Idle : DownloadState()
+    object Downloading : DownloadState()
+    object Success : DownloadState()
+    data class Error(val message: String) : DownloadState()
 }

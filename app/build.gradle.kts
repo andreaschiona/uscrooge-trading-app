@@ -231,6 +231,7 @@ dependencies {
     androidTestImplementation(enforcedPlatform("androidx.compose:compose-bom:2024.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.room:room-testing:2.6.1")
+    androidTestImplementation("io.mockk:mockk:1.13.9")
     androidTestImplementation("androidx.arch.core:core-testing:2.2.0")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
     androidTestImplementation("app.cash.turbine:turbine:1.0.0")

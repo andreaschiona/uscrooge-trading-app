@@ -18,6 +18,9 @@
 # Keep GitHubIssueReporter DTOs for release parsing
 -keep class com.uscrooge.app.integration.GitHubIssueReporter$* { *; }
 
+# Keep UpdateChecker DTOs for release JSON parsing (Gson)
+-keep class com.uscrooge.app.update.** { *; }
+
 # Keep Kraken API DTOs for release parsing
 -keep class com.uscrooge.app.data.api.KrakenResponse { *; }
 -keep class com.uscrooge.app.data.api.ServerTime { *; }

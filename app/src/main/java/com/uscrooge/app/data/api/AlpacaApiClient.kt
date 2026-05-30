@@ -340,12 +340,13 @@ class AlpacaApiClient(
                     )
                 )
             } else {
+                val error = result.exceptionOrNull()
                 Result.success(
                     BrokerHealth(
                         brokerName = brokerName,
                         status = BrokerHealthStatus.OFFLINE,
                         latencyMs = latency,
-                        lastError = result.exceptionOrNull()?.message,
+                        lastError = classifyHealthError(error),
                         lastChecked = startTime
                     )
                 )
@@ -357,10 +358,47 @@ class AlpacaApiClient(
                     brokerName = brokerName,
                     status = BrokerHealthStatus.OFFLINE,
                     latencyMs = latency,
-                    lastError = e.message,
+                    lastError = classifyHealthError(e),
                     lastChecked = startTime
                 )
             )
+        }
+    }
+
+    private fun classifyHealthError(error: Throwable?): String {
+        if (error == null) return "Unknown error"
+        val message = error.message ?: error.javaClass.simpleName
+        return when {
+            message.contains("401") || message.contains("403") ||
+                message.contains("invalid key", ignoreCase = true) ||
+                message.contains("invalid signature", ignoreCase = true) ||
+                message.contains("unauthorized", ignoreCase = true) ||
+                message.contains("forbidden", ignoreCase = true) ||
+                message.contains("Invalid API credentials", ignoreCase = true) ->
+                "Invalid API credentials: wrong or missing Alpaca API key/secret"
+
+            message.contains("422") || message.contains("400") ->
+                "Invalid API request: $message"
+
+            message.contains("429") ->
+                "Rate limit exceeded: too many requests to Alpaca"
+
+            error is java.net.UnknownHostException ||
+                error is java.net.ConnectException ||
+                message.contains("Unable to resolve host", ignoreCase = true) ||
+                message.contains("Failed to connect", ignoreCase = true) ||
+                message.contains("Connection refused", ignoreCase = true) ->
+                "Unreachable URL: cannot connect to Alpaca (check internet or URL)"
+
+            error is java.net.SocketTimeoutException ||
+                message.contains("timeout", ignoreCase = true) ||
+                message.contains("timed out", ignoreCase = true) ->
+                "Connection timeout: Alpaca is slow or unreachable"
+
+            message.contains("500") || message.contains("502") || message.contains("503") ->
+                "Alpaca server error (${message.take(50)}): try again later"
+
+            else -> "Connection error: $message"
         }
     }
 

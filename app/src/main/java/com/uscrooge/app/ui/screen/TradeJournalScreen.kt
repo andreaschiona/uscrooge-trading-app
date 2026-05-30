@@ -1,5 +1,9 @@
 package com.uscrooge.app.ui.screen
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.uscrooge.app.data.model.TradeJournalEntry
@@ -26,17 +31,64 @@ fun TradeJournalScreen(
     val entries by viewModel.entries.collectAsState()
     val stats by viewModel.stats.collectAsState()
     val selectedPair by viewModel.selectedPair.collectAsState()
+    val context = LocalContext.current
+    var showExportToast by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val csv = viewModel.generateCsv()
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    outputStream.write(csv.toByteArray(Charsets.UTF_8))
+                }
+                showExportToast = true
+            } catch (e: Exception) {
+                android.util.Log.e("TradeJournalScreen", "Export failed: ${e.message}", e)
+            }
+        }
+    }
+
+    if (showExportToast) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(2000)
+            showExportToast = false
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "Trade Journal",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Trade Journal",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (entries.isNotEmpty()) {
+                TextButton(onClick = { exportLauncher.launch("trade_journal.csv") }) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Export CSV")
+                }
+            }
+        }
+
+        if (showExportToast) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Export completed successfully",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF4CAF50)
+            )
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 

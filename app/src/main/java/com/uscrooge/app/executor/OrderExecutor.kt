@@ -613,6 +613,105 @@ class OrderExecutor @Inject constructor(
         return Result.success(order)
     }
 
+    suspend fun closePosition(position: Position): Result<Order> {
+        return try {
+            val broker = getBrokerForPosition(position)
+            val isAlpaca = broker === alpacaApiClient
+            val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
+            val volume = position.amount
+
+            if (volume <= 0.0) {
+                return Result.failure(Exception("Position ${position.pair} has no volume to sell"))
+            }
+
+            val orderResult = if (isAlpaca) {
+                broker.placeOrder(
+                    symbol = symbol,
+                    side = OrderSide.SELL,
+                    quantity = volume,
+                    orderType = OrderType.MARKET,
+                    validate = false
+                )
+            } else {
+                (broker as KrakenApiClient).addOrder(
+                    pair = TradingPair.fromString(position.pair),
+                    type = OrderSide.SELL,
+                    volume = volume,
+                    orderType = OrderType.MARKET,
+                    validate = false
+                )
+            }
+
+            if (orderResult.isFailure) {
+                return Result.failure(orderResult.exceptionOrNull()!!)
+            }
+
+            val orderId = orderResult.getOrNull()!!
+
+            position.exchangeStopOrderId?.let { id ->
+                try { broker.cancelOrder(id) } catch (_: Exception) {}
+            }
+            position.exchangeTakeProfitOrderId?.let { id ->
+                try { broker.cancelOrder(id) } catch (_: Exception) {}
+            }
+
+            val fillResult = waitForOrderFill(orderId, position.pair, broker)
+            val fallbackFee = volume * position.currentPrice * 0.0026
+            val (executionPrice, actualVolume, actualFee, finalStatus) = if (fillResult.isSuccess) {
+                val fillInfo = fillResult.getOrNull()!!
+                if (fillInfo.status == OrderStatus.CLOSED) {
+                    Quadruple(fillInfo.executedPrice, fillInfo.executedVolume, fillInfo.fee, fillInfo.status)
+                } else {
+                    Quadruple(position.currentPrice, volume, fallbackFee, OrderStatus.OPEN)
+                }
+            } else {
+                Quadruple(position.currentPrice, volume, fallbackFee, OrderStatus.OPEN)
+            }
+
+            val totalValue = actualVolume * executionPrice
+            val realizedPnL = totalValue - position.totalInvested - actualFee
+
+            val order = Order(
+                orderId = orderId,
+                pair = position.pair,
+                type = OrderType.MARKET,
+                side = OrderSide.SELL,
+                price = executionPrice,
+                amount = actualVolume,
+                cost = totalValue,
+                fee = actualFee,
+                status = finalStatus,
+                createdAt = System.currentTimeMillis(),
+                executedAt = if (finalStatus == OrderStatus.CLOSED) System.currentTimeMillis() else null,
+                signalId = null
+            )
+
+            orderDao.insertOrder(order)
+
+            val closedPosition = position.copy(
+                currentPrice = executionPrice,
+                currentValue = totalValue,
+                unrealizedPnL = realizedPnL,
+                realizedPnL = realizedPnL,
+                isOpen = false,
+                closedAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+                exchangeStopOrderId = null,
+                exchangeTakeProfitOrderId = null
+            )
+
+            positionDao.updatePosition(closedPosition)
+            reportPositionFeedback(closedPosition, "Manual close by user", config)
+
+            Log.i(TAG, "Position closed manually: ${position.pair}, PnL: $realizedPnL")
+
+            Result.success(order)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to close position ${position.pair}: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
     suspend fun ignoreSignal(signal: TradingSignal) {
         signalDao.updateSignal(signal.copy(status = SignalStatus.IGNORED))
     }

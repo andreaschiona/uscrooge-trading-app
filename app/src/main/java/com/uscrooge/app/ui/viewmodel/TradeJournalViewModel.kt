@@ -56,6 +56,21 @@ class TradeJournalViewModel @Inject constructor(
         computeStats(filtered)
     }
 
+    fun generateCsv(): String {
+        val entries = _entries.value
+        if (entries.isEmpty()) return ""
+
+        val header = "Date,Pair,Side,Entry,Exit,Size,PnL,PnL%,ExitReason,Fees,Duration"
+        val rows = entries.joinToString("\n") { e ->
+            val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(e.exitTime))
+            val side = if (e.side.name == "BUY") "Buy" else "Sell"
+            val exitReason = e.exitReason.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() }
+            val durationHours = e.duration / 3600000.0
+            "$date,${e.pair},$side,${e.entryPrice},${e.exitPrice},${e.amount},${e.profitLoss},${e.profitLossPercent}%,$exitReason,${e.fee},${String.format("%.1f", durationHours)}h"
+        }
+        return "$header\n$rows"
+    }
+
     private fun computeStats(entries: List<TradeJournalEntry>) {
         if (entries.isEmpty()) {
             _stats.value = null

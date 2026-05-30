@@ -33,6 +33,7 @@ fun TradeJournalScreen(
     val selectedPair by viewModel.selectedPair.collectAsState()
     val context = LocalContext.current
     var showExportToast by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -46,6 +47,7 @@ fun TradeJournalScreen(
                 showExportToast = true
             } catch (e: Exception) {
                 android.util.Log.e("TradeJournalScreen", "Export failed: ${e.message}", e)
+                exportError = e.message ?: "Export failed"
             }
         }
     }
@@ -54,6 +56,12 @@ fun TradeJournalScreen(
         LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(2000)
             showExportToast = false
+        }
+    }
+    if (exportError != null) {
+        LaunchedEffect(exportError) {
+            kotlinx.coroutines.delay(3000)
+            exportError = null
         }
     }
 
@@ -87,6 +95,14 @@ fun TradeJournalScreen(
                 text = "Export completed successfully",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF4CAF50)
+            )
+        }
+        if (exportError != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Export failed: $exportError",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFE57373)
             )
         }
 

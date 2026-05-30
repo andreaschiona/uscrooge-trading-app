@@ -65,12 +65,11 @@ class DashboardViewModel @Inject constructor(
 
     fun closePosition(position: Position) {
         viewModelScope.launch {
-            try {
-                orderExecutor.closePosition(position)
-                loadDashboard()
-            } catch (e: Exception) {
-                Log.e("DashboardViewModel", "Failed to close position: ${e.message}", e)
-            }
+            orderExecutor.closePosition(position)
+                .onFailure { e ->
+                    Log.e("DashboardViewModel", "Failed to close position: ${e.message}", e)
+                }
+            loadDashboard()
         }
     }
 

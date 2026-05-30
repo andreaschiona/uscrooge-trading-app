@@ -37,7 +37,7 @@ gitHubIssueReporter.reportError(
 ### 2. Labels predefinite
 
 | Label | Quando usarla |
-|---|---|
+| --- | --- |
 | `bug` | Sempre, per errori a runtime |
 | `auto-reported` | Sempre, per issue create automaticamente |
 | `update-check` | Errori nel controllo aggiornamenti |
@@ -99,7 +99,7 @@ fun performAction() {
 
 Le issue create automaticamente DEVONO seguire questo formato:
 
-```
+```text
 ## Contesto Errore
 
 **Errore:** <messaggio errore>

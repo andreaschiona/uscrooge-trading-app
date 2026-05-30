@@ -40,10 +40,15 @@ class UpdateChecker {
                 return Result.failure(IllegalStateException("GitHub repository not configured"))
             }
 
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("https://api.github.com/repos/$repo/releases/latest")
                 .header("Accept", "application/vnd.github.v3+json")
-                .build()
+
+            if (BuildConfig.GITHUB_TOKEN.isNotBlank()) {
+                requestBuilder.header("Authorization", "Bearer ${BuildConfig.GITHUB_TOKEN}")
+            }
+
+            val request = requestBuilder.build()
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {

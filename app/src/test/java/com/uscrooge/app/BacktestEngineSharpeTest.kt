@@ -3,7 +3,9 @@ package com.uscrooge.app
 import com.uscrooge.app.analysis.SentimentAnalyzer
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.backtest.BacktestEngine
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.strategy.TradingStrategy
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Before
@@ -12,11 +14,13 @@ import org.junit.Test
 class BacktestEngineSharpeTest {
 
     private lateinit var engine: BacktestEngine
+    private lateinit var tradeJournalDao: TradeJournalDao
 
     @Before
     fun setup() {
         val analyzer = TechnicalAnalyzer()
-        val strategy = TradingStrategy(analyzer, SentimentAnalyzer())
+        tradeJournalDao = mockk(relaxed = true)
+        val strategy = TradingStrategy(analyzer, SentimentAnalyzer(), tradeJournalDao)
         engine = BacktestEngine(analyzer, strategy)
     }
 

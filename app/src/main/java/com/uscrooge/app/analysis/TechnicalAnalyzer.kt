@@ -449,6 +449,28 @@ class TechnicalAnalyzer {
         )
     }
 
+    fun calculateATR(ohlcData: List<OHLC>, period: Int = 14): Double {
+        require(ohlcData.size >= period + 1) { "Not enough data for ATR" }
+
+        val trueRanges = mutableListOf<Double>()
+        for (i in 1 until ohlcData.size) {
+            val tr = maxOf(
+                ohlcData[i].high - ohlcData[i].low,
+                abs(ohlcData[i].high - ohlcData[i - 1].close),
+                abs(ohlcData[i].low - ohlcData[i - 1].close)
+            )
+            trueRanges.add(tr)
+        }
+
+        var atr = trueRanges.take(period).average()
+
+        for (i in period until trueRanges.size) {
+            atr = ((atr * (period - 1)) + trueRanges[i]) / period
+        }
+
+        return atr
+    }
+
     fun calculateStochasticRSI(
         prices: List<Double>,
         rsiPeriod: Int = 14,

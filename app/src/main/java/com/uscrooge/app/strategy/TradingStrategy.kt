@@ -3,6 +3,7 @@ package com.uscrooge.app.strategy
 import com.google.gson.Gson
 import com.uscrooge.app.analysis.SentimentAnalyzer
 import com.uscrooge.app.analysis.TechnicalAnalyzer
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.model.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,11 +18,17 @@ data class SignalResult(
 @Singleton
 class TradingStrategy @Inject constructor(
     private val analyzer: TechnicalAnalyzer,
-    private val sentimentAnalyzer: SentimentAnalyzer
+    private val sentimentAnalyzer: SentimentAnalyzer,
+    private val tradeJournalDao: TradeJournalDao
 ) {
 
     @Volatile
     private var config: TradingConfig = TradingConfig()
+
+    private companion object {
+        const val MIN_TRADES_FOR_KELLY = 10
+        const val ATR_PERIOD = 14
+    }
 
     /**
      * Updates the active [TradingConfig]. Called by
@@ -31,7 +38,7 @@ class TradingStrategy @Inject constructor(
         this.config = newConfig
     }
 
-    fun generateSignal(
+    suspend fun generateSignal(
         pair: String,
         ohlcData: List<OHLC>,
         currentPrice: Double,
@@ -40,7 +47,6 @@ class TradingStrategy @Inject constructor(
         higherTimeframeTrends: List<Trend> = emptyList(),
         sentiment: FearGreedIndex? = null
     ): SignalResult {
-        // Perform technical analysis
         val analysis = analyzer.analyze(pair, ohlcData, currentPrice, config).copy(
             sentiment = sentiment
         )
@@ -49,58 +55,67 @@ class TradingStrategy @Inject constructor(
             return SignalResult(signal = null, analysis = analysis)
         }
 
-        // Calculate signal strength
         val strength = SignalStrength.calculate(analysis)
-
-        // Determine signal type
         val signalType = determineSignalType(strength, analysis, higherTimeframeTrends, sentiment)
 
-        // Check if we should generate a signal
         if (signalType == SignalType.HOLD || strength.overall < config.minSignalStrength) {
             return SignalResult(signal = null, analysis = analysis)
         }
 
-        // Check if we already have a position for this pair
         val existingPosition = currentPositions.find { it.pair == pair && it.isOpen }
-        if (signalType == SignalType.BUY && existingPosition != null) {
-            // Already have a position, don't buy more
+        val isPyramiding = config.pyramidingEnabled &&
+            signalType == SignalType.BUY &&
+            existingPosition != null &&
+            existingPosition.pyramidLevel < config.maxPyramidingLevels
+
+        if (signalType == SignalType.BUY && existingPosition != null && !isPyramiding) {
             return SignalResult(signal = null, analysis = analysis)
         }
 
         if (signalType == SignalType.SELL && existingPosition == null) {
-            // No position to sell
             return SignalResult(signal = null, analysis = analysis)
         }
 
-        // Check position limits
-        if (signalType == SignalType.BUY) {
+        if (signalType == SignalType.BUY && !isPyramiding) {
             val openPositionsCount = currentPositions.count { it.isOpen }
             if (openPositionsCount >= config.maxOpenPositions) {
                 return SignalResult(signal = null, analysis = analysis)
             }
         }
 
-        // Calculate entry, stop loss, and take profit
         val (entryPrice, stopLoss, takeProfit) = calculatePriceTargets(
             currentPrice = currentPrice,
             signalType = signalType,
             analysis = analysis
         )
 
-        // Calculate suggested amount
+        val atr = if (config.volatilityAdjustment) {
+            analyzer.calculateATR(ohlcData, ATR_PERIOD)
+        } else null
+
+        val winRate = if (config.useKellyCriterion) {
+            val wins = tradeJournalDao.getWinCountByPair(pair)
+            val total = tradeJournalDao.getTotalTradeCountByPair(pair)
+            if (total >= MIN_TRADES_FOR_KELLY) wins.toDouble() / total else null
+        } else null
+
         val suggestedAmount = calculatePositionSize(
             signalType = signalType,
             currentPrice = currentPrice,
             strength = strength.overall,
             existingPosition = existingPosition,
-            availableBalance = availableBalance
+            availableBalance = availableBalance,
+            atr = atr,
+            winRate = winRate,
+            currentPositions = currentPositions,
+            pair = pair,
+            isPyramiding = isPyramiding
         )
 
         if (suggestedAmount <= 0) {
             return SignalResult(signal = null, analysis = analysis)
         }
 
-        // Calculate risk/reward ratio
         val riskRewardRatio = if (signalType == SignalType.BUY) {
             val risk = abs(entryPrice - stopLoss)
             val reward = abs(takeProfit - entryPrice)
@@ -111,7 +126,6 @@ class TradingStrategy @Inject constructor(
             if (risk > 0) reward / risk else 0.0
         }
 
-        // Build reasons list
         val reasons = buildReasonsList(analysis, strength)
 
         return SignalResult(
@@ -330,29 +344,63 @@ class TradingStrategy @Inject constructor(
         currentPrice: Double,
         strength: Double,
         existingPosition: Position?,
-        availableBalance: Double
+        availableBalance: Double,
+        atr: Double? = null,
+        winRate: Double? = null,
+        currentPositions: List<Position> = emptyList(),
+        pair: String = "",
+        isPyramiding: Boolean = false
     ): Double {
         return when (signalType) {
             SignalType.BUY -> {
-                // Calculate base position size
-                val baseAmount = config.getMaxAmountPerTrade(availableBalance)
+                var amount = config.getMaxAmountPerTrade(availableBalance)
 
-                // Scale by signal strength
-                val scaledAmount = baseAmount * (0.5 + (strength * 0.5))
-
-                // Adjust for strong signals
-                val adjustedAmount = if (strength >= config.strongSignalThreshold) {
-                    scaledAmount * 1.2  // Increase by 20% for strong signals
-                } else {
-                    scaledAmount
+                amount *= (0.5 + (strength * 0.5))
+                if (strength >= config.strongSignalThreshold) {
+                    amount *= 1.2
                 }
 
-                // Make sure we don't exceed available balance
-                min(adjustedAmount, availableBalance)
+                // --- Kelly Criterion adjustment ---
+                if (winRate != null && config.useKellyCriterion) {
+                    val b = config.takeProfitPercent / config.stopLossPercent
+                    val p = winRate
+                    val q = 1.0 - p
+                    val kellyFrac = (b * p - q) / b
+                    if (kellyFrac > 0) {
+                        val kellyAmount = availableBalance * kellyFrac * config.kellyFraction
+                        amount = min(amount, kellyAmount)
+                    } else {
+                        return 0.0
+                    }
+                }
+
+                // --- Volatility adjustment ---
+                if (atr != null && config.volatilityAdjustment && currentPrice > 0) {
+                    val atrRatio = atr / currentPrice
+                    val volFactor = 1.0 - min(atrRatio * 10.0, 0.5)
+                    amount *= volFactor
+                }
+
+                // --- Correlation-based cap ---
+                if (config.maxCorrelationExposure < 1.0) {
+                    val correlatedExposure = currentPositions
+                        .filter { it.isOpen && isCorrelated(pair, it.pair) }
+                        .sumOf { it.totalInvested }
+                    val remainingExposure = (availableBalance * config.maxCorrelationExposure) - correlatedExposure
+                    amount = min(amount, maxOf(remainingExposure, 0.0))
+                }
+
+                // --- Pyramiding ---
+                if (isPyramiding && existingPosition != null) {
+                    val pyramidSize = config.getMaxAmountPerTrade(availableBalance) *
+                        config.pyramidingIncrementPercent
+                    amount = min(pyramidSize, amount)
+                }
+
+                min(maxOf(amount, 0.0), availableBalance)
             }
 
             SignalType.SELL -> {
-                // Sell the entire position
                 existingPosition?.let {
                     it.amount * currentPrice
                 } ?: 0.0
@@ -360,6 +408,13 @@ class TradingStrategy @Inject constructor(
 
             SignalType.HOLD -> 0.0
         }
+    }
+
+    private fun isCorrelated(pair1: String, pair2: String): Boolean {
+        if (pair1 == pair2) return false
+        val quote1 = pair1.substringAfter("/").uppercase()
+        val quote2 = pair2.substringAfter("/").uppercase()
+        return quote1 == quote2
     }
 
     private fun buildReasonsList(

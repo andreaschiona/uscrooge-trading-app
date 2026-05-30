@@ -32,7 +32,8 @@ data class Position(
     val realizedPnL: Double? = null,
     val exchangeStopOrderId: String? = null,    // Stop-loss order ID on exchange
     val exchangeTakeProfitOrderId: String? = null, // Take-profit order ID on exchange
-    val broker: String = "Kraken"         // "Kraken" or "Alpaca"
+    val broker: String = "Kraken",        // "Kraken" or "Alpaca"
+    val pyramidLevel: Int = 0             // Number of pyramiding adds on this position
 ) {
     fun calculateCurrentValue(currentPrice: Double): Position {
         val newCurrentValue = amount * currentPrice

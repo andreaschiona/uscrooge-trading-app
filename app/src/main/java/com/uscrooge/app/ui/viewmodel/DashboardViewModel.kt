@@ -2,12 +2,14 @@ package com.uscrooge.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.data.model.Position
 import com.uscrooge.app.data.model.SystemHealth
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.data.repository.TradingRepository
+import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.ui.screen.PieSlice
 import com.uscrooge.app.ui.screen.presetColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +24,8 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     private val repository: TradingRepository,
     private val configRepository: ConfigRepository,
-    private val healthCheckRepository: HealthCheckRepository
+    private val healthCheckRepository: HealthCheckRepository,
+    private val orderExecutor: OrderExecutor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
@@ -58,6 +61,17 @@ class DashboardViewModel @Inject constructor(
 
     fun refreshData() {
         loadDashboard()
+    }
+
+    fun closePosition(position: Position) {
+        viewModelScope.launch {
+            try {
+                orderExecutor.closePosition(position)
+                loadDashboard()
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "Failed to close position: ${e.message}", e)
+            }
+        }
     }
 
     fun generateEquityCurve(portfolio: Portfolio): List<Pair<Float, Float>> {

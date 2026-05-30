@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
@@ -255,7 +256,8 @@ fun DashboardContent(
             items(positions) { position ->
                 PositionCard(
                     position = position,
-                    priceHistory = viewModel.generatePriceHistory(position)
+                    priceHistory = viewModel.generatePriceHistory(position),
+                    onClose = { viewModel.closePosition(position) }
                 )
             }
         }
@@ -359,8 +361,37 @@ fun PortfolioSummaryCard(portfolio: Portfolio) {
 @Composable
 fun PositionCard(
     position: Position,
-    priceHistory: List<Float>
+    priceHistory: List<Float>,
+    onClose: () -> Unit = {}
 ) {
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Close Position") },
+            text = {
+                Text("Are you sure you want to close ${position.pair}? This will place a market sell order.")
+            },
+            confirmButton = {
+                Button(
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373)),
+                    onClick = {
+                        showConfirmDialog = false
+                        onClose()
+                    }
+                ) {
+                    Text("Close")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -391,13 +422,27 @@ fun PositionCard(
                     BrokerBadge(position.broker)
                 }
 
-                val pnlColor = if (position.unrealizedPnL >= 0) Color(0xFF4CAF50) else Color(0xFFE57373)
-                Text(
-                    text = "${if (position.unrealizedPnL >= 0) "+" else ""}${String.format("%.2f", position.unrealizedPnLPercent)}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = pnlColor
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val pnlColor = if (position.unrealizedPnL >= 0) Color(0xFF4CAF50) else Color(0xFFE57373)
+                    Text(
+                        text = "${if (position.unrealizedPnL >= 0) "+" else ""}${String.format("%.2f", position.unrealizedPnLPercent)}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = pnlColor
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { showConfirmDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close position",
+                            tint = Color(0xFFE57373),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

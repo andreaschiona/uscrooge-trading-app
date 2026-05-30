@@ -34,10 +34,14 @@ class BacktestEngine(
         val tradingData = ohlcData.drop(warmupPeriod)
         val feeRate = config.feePercent / 100.0
 
+        val minHistory = 28
+
         for (i in tradingData.indices) {
             val currentCandle = tradingData[i]
             val historicalData = tradingData.take(i + 1)
             val currentPrice = currentCandle.close
+
+            if (historicalData.size < minHistory) continue
 
             val signalResult = tradingStrategy.generateSignal(
                 pair = config.pair,

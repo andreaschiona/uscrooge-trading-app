@@ -459,9 +459,16 @@ class AlpacaApiClient(
             }
             val body = response.body() ?: return Result.failure(Exception("empty response body"))
             val jsonString = body.string()
-            val root = Gson().fromJson(jsonString, JsonElement::class.java).asJsonObject
+            if (jsonString.isBlank()) {
+                return Result.failure(Exception("empty response body for $symbol"))
+            }
 
-            val tradeObj = root.getAsJsonObject("trade")
+            val root = Gson().fromJson(jsonString, JsonElement::class.java)
+            if (root == null || !root.isJsonObject) {
+                return Result.failure(Exception("unexpected response format for $symbol"))
+            }
+
+            val tradeObj = root.asJsonObject.getAsJsonObject("trade")
                 ?: return Result.failure(Exception("no trade data for $symbol"))
 
             val price = tradeObj.get("p")?.asDouble
@@ -479,8 +486,10 @@ class AlpacaApiClient(
 
     private fun parseLatestQuote(jsonString: String): ParsedQuote? {
         return try {
-            val root = Gson().fromJson(jsonString, JsonElement::class.java).asJsonObject
-            val quoteObj = root.getAsJsonObject("quote") ?: return null
+            if (jsonString.isBlank()) return null
+            val root = Gson().fromJson(jsonString, JsonElement::class.java)
+            if (root == null || !root.isJsonObject) return null
+            val quoteObj = root.asJsonObject.getAsJsonObject("quote") ?: return null
             val bid = quoteObj.get("bp")?.asDouble ?: return null
             val ask = quoteObj.get("ap")?.asDouble ?: return null
             ParsedQuote(bid, ask)
@@ -577,26 +586,55 @@ class AlpacaApiClient(
     }
 
     private fun parseBars(jsonString: String, symbol: String): List<OHLC> {
-        val jsonElement = Gson().fromJson(jsonString, JsonElement::class.java)
-        val barsElement = jsonElement.asJsonObject["bars"]
+        if (jsonString.isBlank()) return emptyList()
+        val jsonElement = try {
+            Gson().fromJson(jsonString, JsonElement::class.java)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse JSON response for $symbol: ${e.message}")
+            return emptyList()
+        }
+        if (jsonElement == null || !jsonElement.isJsonObject) {
+            Log.w(TAG, "Unexpected JSON type for $symbol: ${jsonElement?.javaClass?.simpleName ?: "null"}")
+            return emptyList()
+        }
+
+        val barsElement = jsonElement.asJsonObject["bars"] ?: return emptyList()
 
         val barsList: List<Map<String, Any?>> = when {
             barsElement.isJsonArray -> {
-                barsElement.asJsonArray.map { element ->
-                    element.asJsonObject.entrySet().associate { entry ->
-                        entry.key to jsonElementToValue(entry.value)
+                barsElement.asJsonArray.mapNotNull { element ->
+                    if (!element.isJsonObject) return@mapNotNull null
+                    try {
+                        element.asJsonObject.entrySet().associate { entry ->
+                            entry.key to jsonElementToValue(entry.value)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse bar element in $symbol: ${e.message}")
+                        null
                     }
                 }
             }
             barsElement.isJsonObject -> {
-                val barsMap = barsElement.asJsonObject.entrySet().associate { entry ->
-                    entry.key to entry.value.asJsonArray.map { element ->
-                        element.asJsonObject.entrySet().associate { innerEntry ->
-                            innerEntry.key to jsonElementToValue(innerEntry.value)
-                        }
+                try {
+                    val barsMap = barsElement.asJsonObject.entrySet().associate { entry ->
+                        entry.key to if (entry.value.isJsonArray) {
+                            entry.value.asJsonArray.mapNotNull { element ->
+                                if (!element.isJsonObject) return@mapNotNull null
+                                try {
+                                    element.asJsonObject.entrySet().associate { innerEntry ->
+                                        innerEntry.key to jsonElementToValue(innerEntry.value)
+                                    }
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+                        } else emptyList()
                     }
+                    barsMap[symbol] ?: barsMap.values.firstOrNull() ?: emptyList()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to parse multi-symbol bars for $symbol: ${e.message}")
+                    emptyList()
                 }
-                barsMap[symbol] ?: barsMap.values.firstOrNull() ?: emptyList()
             }
             else -> emptyList()
         }

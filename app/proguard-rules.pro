@@ -5,6 +5,16 @@
 -keepattributes *Annotation*
 -keep class com.uscrooge.app.data.model.** { *; }
 
+# Keep Alpaca API models for release JSON parsing
+-keep class com.uscrooge.app.data.api.AlpacaAccount { *; }
+-keep class com.uscrooge.app.data.api.AlpacaClock { *; }
+-keep class com.uscrooge.app.data.api.AlpacaOrder { *; }
+-keep class com.uscrooge.app.data.api.AlpacaPosition { *; }
+-keep class com.uscrooge.app.data.api.AlpacaAsset { *; }
+-keep class com.uscrooge.app.data.api.AlpacaBar { *; }
+-keep class com.uscrooge.app.data.api.AlpacaBarsResponse { *; }
+-keep class com.uscrooge.app.data.api.AlpacaCalendarDay { *; }
+
 # Keep GitHubIssueReporter DTOs for release parsing
 -keep class com.uscrooge.app.integration.GitHubIssueReporter$* { *; }
 

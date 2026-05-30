@@ -14,7 +14,11 @@ data class TechnicalAnalysis(
     val bollingerBands: BollingerBands? = null,
     val adx: ADX? = null,
     val stochasticRSI: StochasticRSI? = null,
-    val sentiment: FearGreedIndex? = null
+    val sentiment: FearGreedIndex? = null,
+    val ichimoku: Ichimoku? = null,
+    val fibonacci: FibonacciLevels? = null,
+    val obv: OBV? = null,
+    val mfi: MFI? = null
 )
 
 data class RSI(
@@ -195,10 +199,99 @@ data class StochasticRSI(
         }
 
     enum class Signal {
-        OVERSOLD,      // Strong buy
-        BULLISH,       // Moderate buy
+        OVERSOLD,
+        BULLISH,
         NEUTRAL,
-        BEARISH,       // Moderate sell
-        OVERBOUGHT     // Strong sell
+        BEARISH,
+        OVERBOUGHT
+    }
+}
+
+data class Ichimoku(
+    val tenkanSen: Double,
+    val kijunSen: Double,
+    val senkouSpanA: Double,
+    val senkouSpanB: Double,
+    val chikouSpan: Double
+) {
+    val signal: Signal
+        get() = when {
+            tenkanSen > kijunSen && senkouSpanA > senkouSpanB -> Signal.BULLISH
+            tenkanSen < kijunSen && senkouSpanA < senkouSpanB -> Signal.BEARISH
+            tenkanSen > kijunSen -> Signal.MILD_BULLISH
+            tenkanSen < kijunSen -> Signal.MILD_BEARISH
+            else -> Signal.NEUTRAL
+        }
+
+    enum class Signal {
+        BULLISH,
+        MILD_BULLISH,
+        NEUTRAL,
+        MILD_BEARISH,
+        BEARISH
+    }
+}
+
+data class FibonacciLevels(
+    val swingHigh: Double,
+    val swingLow: Double,
+    val retracement236: Double,
+    val retracement382: Double,
+    val retracement500: Double,
+    val retracement618: Double,
+    val retracement786: Double,
+    val extension1272: Double,
+    val extension1618: Double,
+    val currentPriceRelative: Double
+) {
+    val signal: Signal
+        get() = when {
+            currentPriceRelative <= 0.236 -> Signal.OVERSOLD
+            currentPriceRelative <= 0.382 -> Signal.BULLISH
+            currentPriceRelative >= 0.786 -> Signal.OVERBOUGHT
+            currentPriceRelative >= 0.618 -> Signal.BEARISH
+            else -> Signal.NEUTRAL
+        }
+
+    enum class Signal {
+        OVERSOLD,
+        BULLISH,
+        NEUTRAL,
+        BEARISH,
+        OVERBOUGHT
+    }
+}
+
+data class OBV(
+    val value: Double,
+    val trend: Trend,
+    val divergence: DivergenceSignal
+) {
+    enum class DivergenceSignal {
+        BULLISH_DIVERGENCE,
+        BEARISH_DIVERGENCE,
+        NO_DIVERGENCE
+    }
+}
+
+data class MFI(
+    val value: Double,
+    val period: Int = 14
+) {
+    val signal: Signal
+        get() = when {
+            value <= 20.0 -> Signal.OVERSOLD
+            value <= 40.0 -> Signal.BULLISH
+            value >= 80.0 -> Signal.OVERBOUGHT
+            value >= 60.0 -> Signal.BEARISH
+            else -> Signal.NEUTRAL
+        }
+
+    enum class Signal {
+        OVERSOLD,
+        BULLISH,
+        NEUTRAL,
+        BEARISH,
+        OVERBOUGHT
     }
 }

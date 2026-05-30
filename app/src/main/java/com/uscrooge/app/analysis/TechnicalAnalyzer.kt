@@ -4,6 +4,7 @@ import com.uscrooge.app.data.model.*
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 class TechnicalAnalyzer {
@@ -47,6 +48,22 @@ class TechnicalAnalyzer {
             calculateStochasticRSI(closePrices)
         } else null
 
+        val ichimoku = if (ohlcData.size >= 52) {
+            calculateIchimoku(ohlcData)
+        } else null
+
+        val fibonacci = if (ohlcData.size >= 20) {
+            calculateFibonacciRetracement(ohlcData)
+        } else null
+
+        val obv = if (ohlcData.size >= 2) {
+            calculateOBV(ohlcData)
+        } else null
+
+        val mfi = if (ohlcData.size >= 16) {
+            calculateMFI(ohlcData)
+        } else null
+
         return TechnicalAnalysis(
             pair = pair,
             timestamp = System.currentTimeMillis(),
@@ -60,7 +77,11 @@ class TechnicalAnalyzer {
             resistance = resistance,
             bollingerBands = bollingerBands,
             adx = adx,
-            stochasticRSI = stochasticRSI
+            stochasticRSI = stochasticRSI,
+            ichimoku = ichimoku,
+            fibonacci = fibonacci,
+            obv = obv,
+            mfi = mfi
         )
     }
 
@@ -523,5 +544,143 @@ class TechnicalAnalyzer {
         }
 
         return StochasticRSI(k = smoothedK, d = smoothedD)
+    }
+
+    fun calculateIchimoku(ohlcData: List<OHLC>): Ichimoku {
+        require(ohlcData.size >= 52) { "Need at least 52 candles for Ichimoku" }
+
+        val closes = ohlcData.map { it.close }
+        val highs = ohlcData.map { it.high }
+        val lows = ohlcData.map { it.low }
+
+        val tenkanSen = (highs.takeLast(9).max() + lows.takeLast(9).min()) / 2.0
+        val kijunSen = (highs.takeLast(26).max() + lows.takeLast(26).min()) / 2.0
+
+        val senkouHigh52 = highs.takeLast(52).max()
+        val senkouLow52 = lows.takeLast(52).min()
+        val senkouSpanB = (senkouHigh52 + senkouLow52) / 2.0
+        val senkouSpanA = (tenkanSen + kijunSen) / 2.0
+
+        val chikouSpan = if (ohlcData.size >= 27) {
+            closes[closes.size - 26]
+        } else closes.last()
+
+        return Ichimoku(
+            tenkanSen = tenkanSen,
+            kijunSen = kijunSen,
+            senkouSpanA = senkouSpanA,
+            senkouSpanB = senkouSpanB,
+            chikouSpan = chikouSpan
+        )
+    }
+
+    fun calculateFibonacciRetracement(ohlcData: List<OHLC>): FibonacciLevels {
+        require(ohlcData.size >= 20) { "Need at least 20 candles for Fibonacci" }
+
+        val recentData = ohlcData.takeLast(50)
+        val highs = recentData.map { it.high }
+        val lows = recentData.map { it.low }
+
+        val swingHigh = highs.max()
+        val swingLow = lows.min()
+        val diff = swingHigh - swingLow
+
+        val currentPrice = ohlcData.last().close
+        val currentPriceRelative = if (diff > 0) {
+            (currentPrice - swingLow) / diff
+        } else 0.5
+
+        return FibonacciLevels(
+            swingHigh = swingHigh,
+            swingLow = swingLow,
+            retracement236 = swingHigh - diff * 0.236,
+            retracement382 = swingHigh - diff * 0.382,
+            retracement500 = swingHigh - diff * 0.5,
+            retracement618 = swingHigh - diff * 0.618,
+            retracement786 = swingHigh - diff * 0.786,
+            extension1272 = swingHigh + diff * 0.272,
+            extension1618 = swingHigh + diff * 0.618,
+            currentPriceRelative = currentPriceRelative
+        )
+    }
+
+    fun calculateOBV(ohlcData: List<OHLC>): OBV {
+        require(ohlcData.size >= 2) { "Need at least 2 candles for OBV" }
+
+        var obvValue = 0.0
+        val obvSeries = mutableListOf<Double>()
+
+        for (i in 1 until ohlcData.size) {
+            val current = ohlcData[i]
+            val previous = ohlcData[i - 1]
+
+            if (current.close > previous.close) {
+                obvValue += current.volume
+            } else if (current.close < previous.close) {
+                obvValue -= current.volume
+            }
+            obvSeries.add(obvValue)
+        }
+
+        val obvTrend = if (obvSeries.size >= 10) {
+            val recent = obvSeries.takeLast(10)
+            val firstHalf = recent.take(5).average()
+            val secondHalf = recent.takeLast(5).average()
+            val trend = secondHalf - firstHalf
+            when {
+                trend > 0 -> Trend.UPTREND
+                trend < 0 -> Trend.DOWNTREND
+                else -> Trend.SIDEWAYS
+            }
+        } else Trend.SIDEWAYS
+
+        val closes = ohlcData.map { it.close }
+        val priceTrend = if (closes.size >= 10) {
+            val recentCloses = closes.takeLast(10)
+            val priceFirstHalf = recentCloses.take(5).average()
+            val priceSecondHalf = recentCloses.takeLast(5).average()
+            val priceTrendVal = priceSecondHalf - priceFirstHalf
+            when {
+                priceTrendVal > 0 -> Trend.UPTREND
+                priceTrendVal < 0 -> Trend.DOWNTREND
+                else -> Trend.SIDEWAYS
+            }
+        } else Trend.SIDEWAYS
+
+        val divergence = when {
+            obvTrend == Trend.UPTREND && priceTrend == Trend.DOWNTREND -> OBV.DivergenceSignal.BULLISH_DIVERGENCE
+            obvTrend == Trend.DOWNTREND && priceTrend == Trend.UPTREND -> OBV.DivergenceSignal.BEARISH_DIVERGENCE
+            else -> OBV.DivergenceSignal.NO_DIVERGENCE
+        }
+
+        return OBV(
+            value = obvValue,
+            trend = obvTrend,
+            divergence = divergence
+        )
+    }
+
+    fun calculateMFI(ohlcData: List<OHLC>, period: Int = 14): MFI {
+        require(ohlcData.size >= period + 1) { "Need at least ${period + 1} candles for MFI" }
+
+        val typicalPrices = ohlcData.map { (it.high + it.low + it.close) / 3.0 }
+        val moneyFlows = typicalPrices.zip(ohlcData.map { it.volume }) { tp, vol -> tp * vol }
+
+        var positiveMF = 0.0
+        var negativeMF = 0.0
+
+        for (i in (ohlcData.size - period) until ohlcData.size) {
+            if (i == 0) continue
+            if (typicalPrices[i] > typicalPrices[i - 1]) {
+                positiveMF += moneyFlows[i]
+            } else {
+                negativeMF += moneyFlows[i]
+            }
+        }
+
+        val moneyRatio = if (negativeMF > 0) positiveMF / negativeMF else 100.0
+        val mfiValue = 100.0 - (100.0 / (1.0 + moneyRatio))
+
+        return MFI(value = mfiValue, period = period)
     }
 }

@@ -66,6 +66,10 @@ data class SignalStrength(
     val bollingerScore: Double = 0.5,
     val adxScore: Double = 0.5,
     val stochRsiScore: Double = 0.5,
+    val ichimokuScore: Double = 0.5,
+    val fibonacciScore: Double = 0.5,
+    val obvScore: Double = 0.5,
+    val mfiScore: Double = 0.5,
     val overall: Double
 ) {
     companion object {
@@ -78,27 +82,49 @@ data class SignalStrength(
             val bollingerScore = calculateBollingerScore(analysis.bollingerBands)
             val adxScore = calculateADXScore(analysis.adx)
             val stochRsiScore = calculateStochRSIScore(analysis.stochasticRSI)
+            val ichimokuScore = calculateIchimokuScore(analysis.ichimoku)
+            val fibonacciScore = calculateFibonacciScore(analysis.fibonacci)
+            val obvScore = calculateOBVScore(analysis.obv)
+            val mfiScore = calculateMFIScore(analysis.mfi)
+
+            val hasExtendedIndicators = analysis.ichimoku != null ||
+                    analysis.fibonacci != null || analysis.obv != null || analysis.mfi != null
 
             val hasNewIndicators = analysis.bollingerBands != null ||
                     analysis.adx != null || analysis.stochasticRSI != null
 
-            val overall = if (hasNewIndicators) {
-                // Adjusted weights when new indicators are available
-                rsiScore * 0.20 +
-                macdScore * 0.20 +
-                volumeScore * 0.10 +
-                patternScore * 0.10 +
-                trendScore * 0.15 +
-                bollingerScore * 0.10 +
-                adxScore * 0.08 +
-                stochRsiScore * 0.07
-            } else {
-                // Original weights for backward compatibility
-                rsiScore * 0.25 +
-                macdScore * 0.25 +
-                volumeScore * 0.15 +
-                patternScore * 0.15 +
-                trendScore * 0.20
+            val overall = when {
+                hasExtendedIndicators -> {
+                    rsiScore * 0.15 +
+                    macdScore * 0.15 +
+                    volumeScore * 0.08 +
+                    patternScore * 0.08 +
+                    trendScore * 0.12 +
+                    bollingerScore * 0.08 +
+                    adxScore * 0.06 +
+                    stochRsiScore * 0.05 +
+                    ichimokuScore * 0.08 +
+                    fibonacciScore * 0.05 +
+                    obvScore * 0.05 +
+                    mfiScore * 0.05
+                }
+                hasNewIndicators -> {
+                    rsiScore * 0.20 +
+                    macdScore * 0.20 +
+                    volumeScore * 0.10 +
+                    patternScore * 0.10 +
+                    trendScore * 0.15 +
+                    bollingerScore * 0.10 +
+                    adxScore * 0.08 +
+                    stochRsiScore * 0.07
+                }
+                else -> {
+                    rsiScore * 0.25 +
+                    macdScore * 0.25 +
+                    volumeScore * 0.15 +
+                    patternScore * 0.15 +
+                    trendScore * 0.20
+                }
             }
 
             return SignalStrength(
@@ -110,6 +136,10 @@ data class SignalStrength(
                 bollingerScore = bollingerScore,
                 adxScore = adxScore,
                 stochRsiScore = stochRsiScore,
+                ichimokuScore = ichimokuScore,
+                fibonacciScore = fibonacciScore,
+                obvScore = obvScore,
+                mfiScore = mfiScore,
                 overall = overall
             )
         }
@@ -182,6 +212,55 @@ data class SignalStrength(
                 StochasticRSI.Signal.NEUTRAL -> 0.5
                 StochasticRSI.Signal.BEARISH -> 0.3
                 StochasticRSI.Signal.OVERBOUGHT -> 0.0
+            }
+        }
+
+        private fun calculateIchimokuScore(ichimoku: Ichimoku?): Double {
+            if (ichimoku == null) return 0.5
+            return when (ichimoku.signal) {
+                Ichimoku.Signal.BULLISH -> 1.0
+                Ichimoku.Signal.MILD_BULLISH -> 0.7
+                Ichimoku.Signal.NEUTRAL -> 0.5
+                Ichimoku.Signal.MILD_BEARISH -> 0.3
+                Ichimoku.Signal.BEARISH -> 0.0
+            }
+        }
+
+        private fun calculateFibonacciScore(fib: FibonacciLevels?): Double {
+            if (fib == null) return 0.5
+            return when (fib.signal) {
+                FibonacciLevels.Signal.OVERSOLD -> 1.0
+                FibonacciLevels.Signal.BULLISH -> 0.7
+                FibonacciLevels.Signal.NEUTRAL -> 0.5
+                FibonacciLevels.Signal.BEARISH -> 0.3
+                FibonacciLevels.Signal.OVERBOUGHT -> 0.0
+            }
+        }
+
+        private fun calculateOBVScore(obv: OBV?): Double {
+            if (obv == null) return 0.5
+            var score = when (obv.trend) {
+                Trend.UPTREND -> 0.7
+                Trend.SIDEWAYS -> 0.5
+                Trend.DOWNTREND -> 0.3
+                else -> 0.5
+            }
+            if (obv.divergence == OBV.DivergenceSignal.BULLISH_DIVERGENCE) {
+                score = 1.0
+            } else if (obv.divergence == OBV.DivergenceSignal.BEARISH_DIVERGENCE) {
+                score = 0.0
+            }
+            return score
+        }
+
+        private fun calculateMFIScore(mfi: MFI?): Double {
+            if (mfi == null) return 0.5
+            return when (mfi.signal) {
+                MFI.Signal.OVERSOLD -> 1.0
+                MFI.Signal.BULLISH -> 0.7
+                MFI.Signal.NEUTRAL -> 0.5
+                MFI.Signal.BEARISH -> 0.3
+                MFI.Signal.OVERBOUGHT -> 0.0
             }
         }
     }

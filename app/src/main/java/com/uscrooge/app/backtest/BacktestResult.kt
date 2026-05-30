@@ -2,6 +2,7 @@ package com.uscrooge.app.backtest
 
 import com.uscrooge.app.data.model.OHLC
 import com.uscrooge.app.data.model.TradingConfig
+import java.util.Locale
 
 data class WalkForwardResult(
     val windows: List<WalkForwardWindow>,
@@ -64,20 +65,26 @@ data class BacktestResult(
     val maxDrawdownPercent: Double,
     val averageTradeDuration: Long,
     val longestTradeDuration: Long,
-    val trades: List<BacktestTrade>
+    val trades: List<BacktestTrade>,
+    val buyAndHoldReturn: Double = 0.0,
+    val buyAndHoldReturnPercent: Double = 0.0,
+    val alpha: Double = 0.0,
+    val beta: Double = 0.0
 ) {
     fun summary(): String {
         return """
             Backtest Result for $pair:
-            Period: ${java.text.SimpleDateFormat("yyyy-MM-dd").format(startDate)} to ${java.text.SimpleDateFormat("yyyy-MM-dd").format(endDate)}
-            Initial Balance: ${String.format("%.2f", initialBalance)}
-            Final Balance: ${String.format("%.2f", finalBalance)}
-            Total Return: ${String.format("%.2f", totalReturnPercent)}%
+            Period: ${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(startDate)} to ${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(endDate)}
+            Initial Balance: ${String.format(Locale.US, "%.2f", initialBalance)}
+            Final Balance: ${String.format(Locale.US, "%.2f", finalBalance)}
+            Total Return: ${String.format(Locale.US, "%.2f", totalReturnPercent)}%
+            Buy & Hold Return: ${String.format(Locale.US, "%.2f", buyAndHoldReturnPercent)}%
+            Alpha: ${String.format(Locale.US, "%.2f", alpha)}%
             Total Trades: $totalTrades
-            Win Rate: ${String.format("%.1f", winRate)}%
-            Profit Factor: ${String.format("%.2f", profitFactor)}
-            Sharpe Ratio: ${String.format("%.2f", sharpeRatio)}
-            Max Drawdown: ${String.format("%.2f", maxDrawdownPercent)}%
+            Win Rate: ${String.format(Locale.US, "%.1f", winRate)}%
+            Profit Factor: ${String.format(Locale.US, "%.2f", profitFactor)}
+            Sharpe Ratio: ${String.format(Locale.US, "%.2f", sharpeRatio)}
+            Max Drawdown: ${String.format(Locale.US, "%.2f", maxDrawdownPercent)}%
         """.trimIndent()
     }
 }
@@ -101,5 +108,6 @@ data class BacktestConfig(
     val interval: Int = 60,
     val candleCount: Int = 1000,
     val slippagePercent: Double = 0.1,
-    val feePercent: Double = 0.26
+    val feePercent: Double = 0.26,
+    val useCompoundInterest: Boolean = false
 )

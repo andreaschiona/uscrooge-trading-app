@@ -1,6 +1,9 @@
 package com.uscrooge.app.data.model
 
 data class TradingConfig(
+    // Onboarding
+    val onboardingCompleted: Boolean = false,
+
     // Trading pairs
     val tradingPairs: List<String> = listOf("BTC/EUR", "ETH/EUR", "SOL/EUR", "XRP/EUR"),
 

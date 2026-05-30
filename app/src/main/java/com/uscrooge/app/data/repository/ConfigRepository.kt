@@ -28,6 +28,7 @@ class ConfigRepository(private val context: Context) {
 
     companion object {
         private const val TAG = "ConfigRepository"
+        private val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val TRADING_PAIRS = stringPreferencesKey("trading_pairs")
         private val RISK_PER_TRADE = doublePreferencesKey("risk_per_trade")
         private val MAX_OPEN_POSITIONS = intPreferencesKey("max_open_positions")
@@ -89,6 +90,7 @@ class ConfigRepository(private val context: Context) {
         }
         .map { preferences ->
             TradingConfig(
+                onboardingCompleted = preferences[ONBOARDING_COMPLETED] ?: false,
                 tradingPairs = preferences[TRADING_PAIRS]?.split(",") ?: listOf("BTC/EUR", "ETH/EUR", "SOL/EUR", "XRP/EUR"),
                 riskPerTrade = preferences[RISK_PER_TRADE] ?: 0.25,
                 maxOpenPositions = preferences[MAX_OPEN_POSITIONS] ?: 3,
@@ -145,6 +147,7 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun updateConfig(config: TradingConfig) {
         context.dataStore.edit { preferences ->
+            preferences[ONBOARDING_COMPLETED] = config.onboardingCompleted
             preferences[TRADING_PAIRS] = config.tradingPairs.joinToString(",")
             preferences[RISK_PER_TRADE] = config.riskPerTrade
             preferences[MAX_OPEN_POSITIONS] = config.maxOpenPositions
@@ -199,6 +202,18 @@ class ConfigRepository(private val context: Context) {
 
     suspend fun resetToDefaults() {
         updateConfig(TradingConfig())
+    }
+
+    suspend fun resetOnboarding() {
+        context.dataStore.edit { preferences ->
+            preferences[ONBOARDING_COMPLETED] = false
+        }
+    }
+
+    suspend fun markOnboardingCompleted() {
+        context.dataStore.edit { preferences ->
+            preferences[ONBOARDING_COMPLETED] = true
+        }
     }
 
     private fun encryptApiKey(plainText: String): String {

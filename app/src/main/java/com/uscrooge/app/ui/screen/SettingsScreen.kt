@@ -1,5 +1,6 @@
 package com.uscrooge.app.ui.screen
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -663,6 +664,54 @@ fun SettingsScreen(
                 }
 
                 item { Spacer(modifier = Modifier.height(24.dp)) }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Ripeti Configurazione Iniziale",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Riavvia la procedura guidata di configurazione. " +
+                                    "Le impostazioni già salvate non verranno perse.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.redoOnboarding() },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Rifai onboarding")
+                            }
+                        }
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
 
                 item {
                     Text(

@@ -437,6 +437,20 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    fun redoOnboarding() {
+        viewModelScope.launch {
+            try {
+                _saveState.value = SaveState.Saving
+                configRepository.resetOnboarding()
+                _saveState.value = SaveState.Success("Onboarding riavviato. Torna alla home per continuare.")
+                kotlinx.coroutines.delay(2000)
+                _saveState.value = SaveState.Idle
+            } catch (e: Exception) {
+                _saveState.value = SaveState.Error(e.message ?: "Failed to reset onboarding")
+            }
+        }
+    }
 }
 
 sealed class SaveState {

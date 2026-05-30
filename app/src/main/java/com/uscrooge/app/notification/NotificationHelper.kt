@@ -149,7 +149,7 @@ class NotificationHelper @Inject constructor(
     fun sendUpdateNotification(latestVersion: String, downloadUrl: String, releaseNotes: String?) {
         val intent = Intent(context, com.uscrooge.app.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("update_download_url", downloadUrl)
+            putExtra("navigate_to_settings", true)
         }
 
         val pendingIntent = PendingIntent.getActivity(

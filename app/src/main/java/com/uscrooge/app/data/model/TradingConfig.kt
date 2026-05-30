@@ -103,6 +103,8 @@ data class TradingConfig(
     val updateCheckIntervalHours: Int = 4,
     val lastUpdateCheckEpoch: Long = 0L,
     val lastAvailableVersion: String = "",
+    val lastDownloadUrl: String = "",
+    val lastReleaseNotes: String = "",
 
     // Update timestamp
     val lastUpdated: Long = System.currentTimeMillis()

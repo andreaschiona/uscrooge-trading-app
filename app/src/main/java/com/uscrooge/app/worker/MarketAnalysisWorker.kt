@@ -77,7 +77,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                 reportToGitHub("Kraken position sync failed", e)
             }
             try {
-                if (config.enableStockTrading && config.alpacaApiKey.isNotBlank() && config.alpacaApiSecret.isNotBlank()) {
+                if (config.alpacaApiKey.isNotBlank() && config.alpacaApiSecret.isNotBlank()) {
                     repository.syncOpenPositionsFromAlpaca(config)
                 }
             } catch (e: Exception) {

@@ -43,7 +43,7 @@ class DashboardViewModel @Inject constructor(
 
                 // Sync positions from both brokers
                 repository.syncOpenPositionsFromKraken(config)
-                if (config.enableStockTrading && config.alpacaApiKey.isNotBlank()) {
+                if (config.alpacaApiKey.isNotBlank()) {
                     repository.syncOpenPositionsFromAlpaca(config)
                 }
 

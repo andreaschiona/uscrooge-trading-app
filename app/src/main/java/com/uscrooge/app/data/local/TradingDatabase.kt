@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.uscrooge.app.BuildConfig
 import com.uscrooge.app.data.model.AuditLogEntry
 import com.uscrooge.app.data.model.*
 
@@ -16,7 +17,7 @@ import com.uscrooge.app.data.model.*
         AuditLogEntry::class
     ],
     version = 8,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class TradingDatabase : RoomDatabase() {
 
@@ -32,13 +33,19 @@ abstract class TradingDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): TradingDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                val builder = Room.databaseBuilder(
                     context.applicationContext,
                     TradingDatabase::class.java,
                     "uscrooge_database"
                 )
-                    .fallbackToDestructiveMigration()
-                    .build()
+                    .addMigrations(
+                        MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                        MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                    )
+                if (BuildConfig.DEBUG) {
+                    builder.fallbackToDestructiveMigration()
+                }
+                val instance = builder.build()
                 INSTANCE = instance
                 instance
             }

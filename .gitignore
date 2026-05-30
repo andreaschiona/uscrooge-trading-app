@@ -33,3 +33,5 @@ build/
 keystore.properties
 *.jks
 *.keystore
+
+# Room schema export (versioned for audit trail — keep tracked)

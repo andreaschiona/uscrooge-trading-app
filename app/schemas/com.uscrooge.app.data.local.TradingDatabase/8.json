@@ -1,0 +1,676 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 8,
+    "identityHash": "6ca5cda0b05e21823a066d8898653936",
+    "entities": [
+      {
+        "tableName": "trading_signals",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pair` TEXT NOT NULL, `type` TEXT NOT NULL, `strength` REAL NOT NULL, `currentPrice` REAL NOT NULL, `suggestedPrice` REAL NOT NULL, `stopLoss` REAL NOT NULL, `takeProfit` REAL NOT NULL, `suggestedAmount` REAL NOT NULL, `riskRewardRatio` REAL NOT NULL, `timestamp` INTEGER NOT NULL, `reasons` TEXT NOT NULL, `status` TEXT NOT NULL, `executedAt` INTEGER, `executedPrice` REAL, `orderId` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pair",
+            "columnName": "pair",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "strength",
+            "columnName": "strength",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentPrice",
+            "columnName": "currentPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedPrice",
+            "columnName": "suggestedPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stopLoss",
+            "columnName": "stopLoss",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "takeProfit",
+            "columnName": "takeProfit",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedAmount",
+            "columnName": "suggestedAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "riskRewardRatio",
+            "columnName": "riskRewardRatio",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reasons",
+            "columnName": "reasons",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedAt",
+            "columnName": "executedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "executedPrice",
+            "columnName": "executedPrice",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "orderId",
+            "columnName": "orderId",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trading_signals_pair",
+            "unique": false,
+            "columnNames": [
+              "pair"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trading_signals_pair` ON `${TABLE_NAME}` (`pair`)"
+          },
+          {
+            "name": "index_trading_signals_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trading_signals_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_trading_signals_timestamp",
+            "unique": false,
+            "columnNames": [
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trading_signals_timestamp` ON `${TABLE_NAME}` (`timestamp`)"
+          },
+          {
+            "name": "index_trading_signals_pair_status",
+            "unique": false,
+            "columnNames": [
+              "pair",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trading_signals_pair_status` ON `${TABLE_NAME}` (`pair`, `status`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "orders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`orderId` TEXT NOT NULL, `pair` TEXT NOT NULL, `type` TEXT NOT NULL, `side` TEXT NOT NULL, `price` REAL NOT NULL, `amount` REAL NOT NULL, `cost` REAL NOT NULL, `fee` REAL NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `executedAt` INTEGER, `signalId` INTEGER, PRIMARY KEY(`orderId`))",
+        "fields": [
+          {
+            "fieldPath": "orderId",
+            "columnName": "orderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pair",
+            "columnName": "pair",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "side",
+            "columnName": "side",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "price",
+            "columnName": "price",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cost",
+            "columnName": "cost",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fee",
+            "columnName": "fee",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "executedAt",
+            "columnName": "executedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "signalId",
+            "columnName": "signalId",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "orderId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_orders_pair",
+            "unique": false,
+            "columnNames": [
+              "pair"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_orders_pair` ON `${TABLE_NAME}` (`pair`)"
+          },
+          {
+            "name": "index_orders_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_orders_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_orders_createdAt",
+            "unique": false,
+            "columnNames": [
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_orders_createdAt` ON `${TABLE_NAME}` (`createdAt`)"
+          },
+          {
+            "name": "index_orders_pair_status",
+            "unique": false,
+            "columnNames": [
+              "pair",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_orders_pair_status` ON `${TABLE_NAME}` (`pair`, `status`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "positions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pair` TEXT NOT NULL, `amount` REAL NOT NULL, `averageEntryPrice` REAL NOT NULL, `currentPrice` REAL NOT NULL, `peakPrice` REAL NOT NULL, `totalInvested` REAL NOT NULL, `currentValue` REAL NOT NULL, `unrealizedPnL` REAL NOT NULL, `unrealizedPnLPercent` REAL NOT NULL, `openedAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `isOpen` INTEGER NOT NULL, `closedAt` INTEGER, `realizedPnL` REAL, `exchangeStopOrderId` TEXT, `exchangeTakeProfitOrderId` TEXT, `broker` TEXT NOT NULL, `pyramidLevel` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pair",
+            "columnName": "pair",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "averageEntryPrice",
+            "columnName": "averageEntryPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentPrice",
+            "columnName": "currentPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "peakPrice",
+            "columnName": "peakPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalInvested",
+            "columnName": "totalInvested",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentValue",
+            "columnName": "currentValue",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unrealizedPnL",
+            "columnName": "unrealizedPnL",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unrealizedPnLPercent",
+            "columnName": "unrealizedPnLPercent",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "openedAt",
+            "columnName": "openedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isOpen",
+            "columnName": "isOpen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "closedAt",
+            "columnName": "closedAt",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "realizedPnL",
+            "columnName": "realizedPnL",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "exchangeStopOrderId",
+            "columnName": "exchangeStopOrderId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "exchangeTakeProfitOrderId",
+            "columnName": "exchangeTakeProfitOrderId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "broker",
+            "columnName": "broker",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pyramidLevel",
+            "columnName": "pyramidLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_positions_pair",
+            "unique": false,
+            "columnNames": [
+              "pair"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_positions_pair` ON `${TABLE_NAME}` (`pair`)"
+          },
+          {
+            "name": "index_positions_isOpen",
+            "unique": false,
+            "columnNames": [
+              "isOpen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_positions_isOpen` ON `${TABLE_NAME}` (`isOpen`)"
+          },
+          {
+            "name": "index_positions_broker",
+            "unique": false,
+            "columnNames": [
+              "broker"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_positions_broker` ON `${TABLE_NAME}` (`broker`)"
+          },
+          {
+            "name": "index_positions_pair_isOpen",
+            "unique": false,
+            "columnNames": [
+              "pair",
+              "isOpen"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_positions_pair_isOpen` ON `${TABLE_NAME}` (`pair`, `isOpen`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "trade_journal",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pair` TEXT NOT NULL, `side` TEXT NOT NULL, `entryPrice` REAL NOT NULL, `exitPrice` REAL NOT NULL, `amount` REAL NOT NULL, `entryTime` INTEGER NOT NULL, `exitTime` INTEGER NOT NULL, `profitLoss` REAL NOT NULL, `profitLossPercent` REAL NOT NULL, `fee` REAL NOT NULL, `exitReason` TEXT NOT NULL, `duration` INTEGER NOT NULL, `signalStrength` REAL NOT NULL, `signalReasons` TEXT NOT NULL, `notes` TEXT, `tags` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pair",
+            "columnName": "pair",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "side",
+            "columnName": "side",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entryPrice",
+            "columnName": "entryPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitPrice",
+            "columnName": "exitPrice",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entryTime",
+            "columnName": "entryTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitTime",
+            "columnName": "exitTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profitLoss",
+            "columnName": "profitLoss",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profitLossPercent",
+            "columnName": "profitLossPercent",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fee",
+            "columnName": "fee",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitReason",
+            "columnName": "exitReason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "duration",
+            "columnName": "duration",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signalStrength",
+            "columnName": "signalStrength",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signalReasons",
+            "columnName": "signalReasons",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trade_journal_pair",
+            "unique": false,
+            "columnNames": [
+              "pair"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trade_journal_pair` ON `${TABLE_NAME}` (`pair`)"
+          },
+          {
+            "name": "index_trade_journal_exitTime",
+            "unique": false,
+            "columnNames": [
+              "exitTime"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trade_journal_exitTime` ON `${TABLE_NAME}` (`exitTime`)"
+          },
+          {
+            "name": "index_trade_journal_pair_exitTime",
+            "unique": false,
+            "columnNames": [
+              "pair",
+              "exitTime"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trade_journal_pair_exitTime` ON `${TABLE_NAME}` (`pair`, `exitTime`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "audit_log",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `category` TEXT NOT NULL, `action` TEXT NOT NULL, `details` TEXT NOT NULL, `severity` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "details",
+            "columnName": "details",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "severity",
+            "columnName": "severity",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_audit_log_timestamp",
+            "unique": false,
+            "columnNames": [
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_timestamp` ON `${TABLE_NAME}` (`timestamp`)"
+          },
+          {
+            "name": "index_audit_log_category",
+            "unique": false,
+            "columnNames": [
+              "category"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_category` ON `${TABLE_NAME}` (`category`)"
+          },
+          {
+            "name": "index_audit_log_category_timestamp",
+            "unique": false,
+            "columnNames": [
+              "category",
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_audit_log_category_timestamp` ON `${TABLE_NAME}` (`category`, `timestamp`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6ca5cda0b05e21823a066d8898653936')"
+    ]
+  }
+}

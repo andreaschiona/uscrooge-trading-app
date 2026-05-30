@@ -396,6 +396,19 @@ fun SettingsScreen(
                                 )
                             }
 
+                            val lastCheckEpoch = currentConfig.lastUpdateCheckEpoch
+                            if (lastCheckEpoch > 0L) {
+                                val lastCheckDate = java.text.SimpleDateFormat(
+                                    "dd/MM/yyyy HH:mm",
+                                    java.util.Locale.getDefault()
+                                ).format(java.util.Date(lastCheckEpoch))
+                                Text(
+                                    text = "Last check: $lastCheckDate",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
                             Button(
                                 onClick = { viewModel.checkForUpdates() },
                                 modifier = Modifier.fillMaxWidth(),
@@ -428,6 +441,15 @@ fun SettingsScreen(
                             } else if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate) {
                                 Text(
                                     text = "You have the latest version",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                val dateStr = java.text.SimpleDateFormat(
+                                    "dd/MM/yyyy HH:mm",
+                                    java.util.Locale.getDefault()
+                                ).format(java.util.Date(state.lastCheckDate))
+                                Text(
+                                    text = "Verified at $dateStr",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

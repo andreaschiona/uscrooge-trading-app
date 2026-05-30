@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.uscrooge.app.BuildConfig
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.model.TradingConfig
@@ -375,10 +376,20 @@ class SettingsViewModel @Inject constructor(
     fun checkForUpdates() {
         viewModelScope.launch {
             _updateCheckState.value = UpdateCheckState.Checking
+            val now = System.currentTimeMillis()
             val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 updateChecker.checkForUpdate()
             }
             result.onSuccess { checkResult ->
+                val config = _config.value
+                if (config != null) {
+                    configRepository.updateConfig(
+                        config.copy(
+                            lastUpdateCheckEpoch = now,
+                            lastAvailableVersion = checkResult.latestVersion
+                        )
+                    )
+                }
                 if (checkResult.isUpdateAvailable) {
                     _updateCheckState.value = UpdateCheckState.Available(
                         version = checkResult.latestVersion,
@@ -386,11 +397,22 @@ class SettingsViewModel @Inject constructor(
                         releaseNotes = checkResult.releaseNotes
                     )
                 } else {
-                    _updateCheckState.value = UpdateCheckState.UpToDate
+                    _updateCheckState.value = UpdateCheckState.UpToDate(lastCheckDate = now)
                 }
             }.onFailure { error ->
                 _updateCheckState.value = UpdateCheckState.Error(
                     error.message ?: "Failed to check for updates"
+                )
+                gitHubIssueReporter.reportError(
+                    title = "Update check failed",
+                    body = buildString {
+                        appendLine("## Update Check Error")
+                        appendLine()
+                        appendLine("Error: ${error.message}")
+                        appendLine("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("Timestamp: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(now))}")
+                    },
+                    labels = listOf("bug", "auto-reported", "update-check")
                 )
             }
         }
@@ -428,7 +450,7 @@ sealed class SaveState {
 sealed class UpdateCheckState {
     object Idle : UpdateCheckState()
     object Checking : UpdateCheckState()
-    object UpToDate : UpdateCheckState()
+    data class UpToDate(val lastCheckDate: Long = System.currentTimeMillis()) : UpdateCheckState()
     data class Available(val version: String, val downloadUrl: String, val releaseNotes: String) : UpdateCheckState()
     data class Error(val message: String) : UpdateCheckState()
 }

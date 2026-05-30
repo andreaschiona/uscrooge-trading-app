@@ -201,6 +201,49 @@ class DashboardViewModelTest {
     }
 
     @Test
+    fun `closePosition calls orderExecutor and reloads dashboard`() = runTest {
+        coEvery { configRepository.configFlow } returns flowOf(TradingConfig())
+        coEvery { repository.syncOpenPositionsFromKraken(any()) } returns Unit
+        coEvery { repository.getOpenPositions() } returns flowOf(emptyList())
+        coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
+        every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
+
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        advanceUntilIdle()
+
+        val position = createTestPosition()
+        coEvery { orderExecutor.closePosition(position) } returns Result.success(mockk())
+
+        viewModel.closePosition(position)
+        advanceUntilIdle()
+
+        coVerify { orderExecutor.closePosition(position) }
+        coVerify(exactly = 2) { repository.getPortfolio(any()) }
+    }
+
+    @Test
+    fun `closePosition logs error on failure`() = runTest {
+        coEvery { configRepository.configFlow } returns flowOf(TradingConfig())
+        coEvery { repository.syncOpenPositionsFromKraken(any()) } returns Unit
+        coEvery { repository.getOpenPositions() } returns flowOf(emptyList())
+        coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
+        every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
+
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        advanceUntilIdle()
+
+        val position = createTestPosition()
+        val error = Exception("Close failed")
+        coEvery { orderExecutor.closePosition(position) } returns Result.failure(error)
+
+        viewModel.closePosition(position)
+        advanceUntilIdle()
+
+        coVerify { orderExecutor.closePosition(position) }
+        coVerify(exactly = 2) { repository.getPortfolio(any()) }
+    }
+
+    @Test
     fun `generateEquityCurve with empty positions returns available balance`() = runTest {
         coEvery { configRepository.configFlow } returns flowOf(TradingConfig())
         coEvery { repository.syncOpenPositionsFromKraken(any()) } returns Unit

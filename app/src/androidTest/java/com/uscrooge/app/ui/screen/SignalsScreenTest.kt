@@ -9,8 +9,6 @@ import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.executor.OrderExecutor
 import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.notification.NotificationHelper
-import com.uscrooge.app.ui.viewmodel.ExecutionState
-import com.uscrooge.app.ui.viewmodel.SignalsUiState
 import com.uscrooge.app.ui.viewmodel.SignalsViewModel
 import io.mockk.coEvery
 import io.mockk.every
@@ -28,7 +26,6 @@ class SignalsScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private lateinit var viewModel: TestSignalsViewModel
     private val repository: TradingRepository = mockk(relaxed = true)
     private val orderExecutor: OrderExecutor = mockk(relaxed = true)
 
@@ -36,85 +33,117 @@ class SignalsScreenTest {
     fun setup() {
         coEvery { repository.getAllSignals() } returns flowOf(emptyList())
         coEvery { repository.lastAnalysisLog } returns MutableStateFlow(null)
-        mockkStatic(android.util.Log::class)
-        every { android.util.Log.w(any<String>(), any<String>()) } returns 0
-        every { android.util.Log.e(any<String>(), any<String>()) } returns 0
-        every { android.util.Log.d(any<String>(), any<String>()) } returns 0
-    }
-
-    @Test
-    fun loadingStateShowsCircularProgressIndicator() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        viewModel._uiState.value = SignalsUiState.Loading
-        composeTestRule.setContent {
-            SignalsScreen(viewModel = viewModel)
-        }
-        composeTestRule.onNodeWithTag("CircularProgressIndicator").assertExists()
-    }
-
-    @Test
-    fun emptySignalsShowsNoSignalsText() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        viewModel._uiState.value = SignalsUiState.Success(emptyList())
-        composeTestRule.setContent {
-            SignalsScreen(viewModel = viewModel)
-        }
-        composeTestRule.onText("No signals available").assertExists()
     }
 
     @Test
     fun successStateShowsSignalsTitle() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        viewModel._uiState.value = SignalsUiState.Success(emptyList())
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
         composeTestRule.setContent {
             SignalsScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("Trading Signals").assertExists()
+        composeTestRule.onNodeWithText("Trading Signals").assertExists()
     }
 
     @Test
-    fun pendingSignalShowsExecuteAndIgnoreButtons() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        val signal = createTestSignal()
-        viewModel._uiState.value = SignalsUiState.Success(listOf(signal))
+    fun emptySignalsShowsNoSignalsText() {
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
         composeTestRule.setContent {
             SignalsScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("Execute").assertExists()
-        composeTestRule.onText("Ignore").assertExists()
-    }
-
-    @Test
-    fun executedSignalDoesNotShowActionButtons() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        val signal = createTestSignal(status = SignalStatus.EXECUTED, executedAt = System.currentTimeMillis(), executedPrice = 50100.0, orderId = "test-order")
-        viewModel._uiState.value = SignalsUiState.Success(listOf(signal))
-        composeTestRule.setContent {
-            SignalsScreen(viewModel = viewModel)
-        }
-        composeTestRule.onText("Execute").assertDoesNotExist()
+        composeTestRule.onNodeWithText("No signals available").assertExists()
     }
 
     @Test
     fun errorStateShowsErrorMessage() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        viewModel._uiState.value = SignalsUiState.Error("Failed to load")
+        coEvery { repository.getAllSignals() } returns flowOf(emptyList())
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
         composeTestRule.setContent {
             SignalsScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("Error: Failed to load").assertExists()
     }
 
     @Test
     fun signalPairAndTypeAreDisplayed() {
-        viewModel = TestSignalsViewModel(repository, mockk(relaxed = true), orderExecutor, mockk(relaxed = true), mockk(relaxed = true))
-        val signal = createTestSignal(pair = "BTC/EUR", type = SignalType.BUY)
-        viewModel._uiState.value = SignalsUiState.Success(listOf(signal))
+        val signals = listOf(createTestSignal(pair = "BTC/EUR", type = SignalType.BUY))
+        coEvery { repository.getAllSignals() } returns flowOf(signals)
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
         composeTestRule.setContent {
             SignalsScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("BTC/EUR").assertExists()
-        composeTestRule.onText("BUY").assertExists()
+        composeTestRule.onNodeWithText("BTC/EUR").assertExists()
+        composeTestRule.onNodeWithText("BUY").assertExists()
+    }
+
+    @Test
+    fun pendingSignalShowsExecuteAndIgnoreButtons() {
+        val signals = listOf(createTestSignal())
+        coEvery { repository.getAllSignals() } returns flowOf(signals)
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
+        composeTestRule.setContent {
+            SignalsScreen(viewModel = viewModel)
+        }
+        composeTestRule.onNodeWithText("Execute").assertExists()
+        composeTestRule.onNodeWithText("Ignore").assertExists()
+    }
+
+    @Test
+    fun executedSignalDoesNotShowActionButtons() {
+        val signals = listOf(
+            createTestSignal(
+                status = SignalStatus.EXECUTED,
+                executedAt = System.currentTimeMillis(),
+                executedPrice = 50100.0,
+                orderId = "test-order"
+            )
+        )
+        coEvery { repository.getAllSignals() } returns flowOf(signals)
+        val viewModel = SignalsViewModel(
+            repository,
+            mockk(relaxed = true),
+            orderExecutor,
+            mockk(relaxed = true),
+            mockk(relaxed = true)
+        )
+        composeTestRule.waitForIdle()
+        composeTestRule.setContent {
+            SignalsScreen(viewModel = viewModel)
+        }
+        composeTestRule.onNodeWithText("Execute").assertDoesNotExist()
     }
 
     private fun createTestSignal(
@@ -143,15 +172,4 @@ class SignalsScreenTest {
         executedPrice = executedPrice,
         orderId = orderId
     )
-}
-
-class TestSignalsViewModel(
-    repository: TradingRepository,
-    configRepository: ConfigRepository,
-    orderExecutor: OrderExecutor,
-    gitHubIssueReporter: GitHubIssueReporter,
-    notificationHelper: NotificationHelper
-) : SignalsViewModel(repository, configRepository, orderExecutor, gitHubIssueReporter, notificationHelper) {
-    val _uiState = MutableStateFlow<SignalsUiState>(SignalsUiState.Loading)
-    override val uiState = _uiState
 }

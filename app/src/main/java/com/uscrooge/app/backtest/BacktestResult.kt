@@ -3,6 +3,47 @@ package com.uscrooge.app.backtest
 import com.uscrooge.app.data.model.OHLC
 import com.uscrooge.app.data.model.TradingConfig
 
+data class WalkForwardResult(
+    val windows: List<WalkForwardWindow>,
+    val averageReturnPercent: Double,
+    val averageSharpeRatio: Double,
+    val averageMaxDrawdownPercent: Double,
+    val totalTrades: Int
+)
+
+data class WalkForwardWindow(
+    val windowIndex: Int,
+    val trainStart: Long,
+    val trainEnd: Long,
+    val testStart: Long,
+    val testEnd: Long,
+    val totalReturnPercent: Double,
+    val sharpeRatio: Double,
+    val maxDrawdownPercent: Double,
+    val totalTrades: Int,
+    val winRate: Double
+)
+
+data class MonteCarloResult(
+    val iterations: Int,
+    val meanReturnPercent: Double,
+    val medianReturnPercent: Double,
+    val stdDevReturnPercent: Double,
+    val percentile5ReturnPercent: Double,
+    val percentile95ReturnPercent: Double,
+    val probabilityOfProfitPercent: Double
+)
+
+data class OptimizationResult(
+    val parameters: Map<String, Double>,
+    val totalReturnPercent: Double,
+    val sharpeRatio: Double,
+    val maxDrawdownPercent: Double,
+    val totalTrades: Int,
+    val winRate: Double,
+    val profitFactor: Double
+)
+
 data class BacktestResult(
     val pair: String,
     val startDate: Long,

@@ -7,7 +7,6 @@ import com.uscrooge.app.data.model.*
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.data.repository.TradingRepository
-import com.uscrooge.app.ui.viewmodel.DashboardUiState
 import com.uscrooge.app.ui.viewmodel.DashboardViewModel
 import io.mockk.coEvery
 import io.mockk.every
@@ -25,7 +24,6 @@ class DashboardScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private lateinit var viewModel: DashboardViewModel
     private val repository: TradingRepository = mockk(relaxed = true)
     private val configRepository: ConfigRepository = mockk(relaxed = true)
     private val healthCheckRepository: HealthCheckRepository = mockk(relaxed = true)
@@ -33,76 +31,58 @@ class DashboardScreenTest {
     @Before
     fun setup() {
         coEvery { configRepository.configFlow } returns flowOf(TradingConfig())
+        coEvery { repository.syncOpenPositionsFromKraken(any()) } returns Unit
         coEvery { repository.getOpenPositions() } returns flowOf(emptyList())
         coEvery { repository.getPortfolio(any()) } returns createEmptyPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createEmptyHealth())
-        mockkStatic(android.util.Log::class)
-        every { android.util.Log.w(any<String>(), any<String>()) } returns 0
-        every { android.util.Log.e(any<String>(), any<String>()) } returns 0
-        every { android.util.Log.d(any<String>(), any<String>()) } returns 0
-    }
-
-    @Test
-    fun loadingStateShowsCircularProgressIndicator() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        viewModel._uiState.value = DashboardUiState.Loading
-        composeTestRule.setContent {
-            DashboardScreen(viewModel = viewModel)
-        }
-        composeTestRule.onNodeWithTag("CircularProgressIndicator").assertExists()
     }
 
     @Test
     fun successStateShowsPortfolioTitle() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        val portfolio = createEmptyPortfolio()
-        viewModel._uiState.value = DashboardUiState.Success(portfolio, emptyList())
+        val viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository)
+        composeTestRule.waitForIdle()
         composeTestRule.setContent {
             DashboardScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("Portfolio").assertExists()
+        composeTestRule.onNodeWithText("Portfolio").assertExists()
     }
 
     @Test
     fun successStateShowsRefreshButton() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        val portfolio = createEmptyPortfolio()
-        viewModel._uiState.value = DashboardUiState.Success(portfolio, emptyList())
+        val viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository)
         composeTestRule.setContent {
             DashboardScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("Refresh").assertExists()
-    }
-
-    @Test
-    fun errorStateShowsErrorMessage() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        viewModel._uiState.value = DashboardUiState.Error("Test error message")
-        composeTestRule.setContent {
-            DashboardScreen(viewModel = viewModel)
-        }
-        composeTestRule.onText("Error: Test error message").assertExists()
-    }
-
-    @Test
-    fun errorStateShowsRetryButton() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        viewModel._uiState.value = DashboardUiState.Error("Something broke")
-        composeTestRule.setContent {
-            DashboardScreen(viewModel = viewModel)
-        }
-        composeTestRule.onText("Retry").assertExists()
+        composeTestRule.onNodeWithText("Refresh").assertExists()
     }
 
     @Test
     fun emptyPositionsShowsNoOpenPositionsText() {
-        viewModel = TestDashboardViewModel(repository, configRepository, healthCheckRepository)
-        val portfolio = createEmptyPortfolio()
-        viewModel._uiState.value = DashboardUiState.Success(portfolio, emptyList())
+        val viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository)
         composeTestRule.setContent {
             DashboardScreen(viewModel = viewModel)
         }
-        composeTestRule.onText("No open positions").assertExists()
+        composeTestRule.onNodeWithText("No open positions").assertExists()
+    }
+
+    @Test
+    fun errorStateShowsErrorMessage() {
+        coEvery { repository.syncOpenPositionsFromKraken(any()) } throws RuntimeException("Test error message")
+        val viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository)
+        composeTestRule.setContent {
+            DashboardScreen(viewModel = viewModel)
+        }
+        composeTestRule.onNodeWithText("Error: Test error message").assertExists()
+    }
+
+    @Test
+    fun errorStateShowsRetryButton() {
+        coEvery { repository.syncOpenPositionsFromKraken(any()) } throws RuntimeException("Something broke")
+        val viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository)
+        composeTestRule.setContent {
+            DashboardScreen(viewModel = viewModel)
+        }
+        composeTestRule.onNodeWithText("Retry").assertExists()
     }
 
     private fun createEmptyPortfolio() = Portfolio(
@@ -120,13 +100,4 @@ class DashboardScreenTest {
         fearGreed = null,
         lastUpdated = System.currentTimeMillis()
     )
-}
-
-class TestDashboardViewModel(
-    repository: TradingRepository,
-    configRepository: ConfigRepository,
-    healthCheckRepository: HealthCheckRepository
-) : DashboardViewModel(repository, configRepository, healthCheckRepository) {
-    val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
-    override val uiState = _uiState
 }

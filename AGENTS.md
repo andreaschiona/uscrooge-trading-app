@@ -20,7 +20,7 @@
 
 ## Data/storage and background behavior
 - Persistent data is split between Room (`TradingDatabase`, DB name `uscrooge_database`) and DataStore preferences (`trading_config`).
-- Room uses `fallbackToDestructiveMigration()`; schema changes without migrations will wipe local DB data.
+- **Room no longer uses `fallbackToDestructiveMigration()` by default.** Proper migrations are now enforced (see `Migrations.kt`). In debug builds only, `fallbackToDestructiveMigration()` is enabled as a safety net.
 - Background analysis is scheduled via WorkManager unique periodic work name `market_analysis_work`; rescheduling uses `ExistingPeriodicWorkPolicy.REPLACE`.
 
 ## Key architectural components
@@ -47,3 +47,26 @@
 - Room uses destructive migration: any schema change (adding columns to entities) wipes DB. Use proper migrations for production data preservation.
 - `Position.peakPrice` tracks the highest price since entry for trailing stop. It must be updated via `calculateCurrentValue()` on every price refresh.
 - Kraken `stop-loss` and `take-profit` order types require the `price` parameter (trigger price).
+
+## Database migrations
+
+### How to add a new entity or column
+1. Add/modify the entity class in `app/src/main/java/com/uscrooge/app/data/model/`.
+2. **Bump `version`** in `TradingDatabase.kt` (e.g., `8` → `9`).
+3. Add the new entity to the `entities` array in `TradingDatabase.kt` if needed.
+4. **Create a new migration** in `Migrations.kt`:
+   ```kotlin
+   val MIGRATION_8_9 = object : Migration(8, 9) {
+       override fun migrate(db: SupportSQLiteDatabase) {
+           db.execSQL("ALTER TABLE positions ADD COLUMN newColumn TEXT NOT NULL DEFAULT ''")
+       }
+   }
+   ```
+5. Register the new migration in `TradingDatabase.kt`'s `addMigrations(...)` call.
+6. Generate the schema JSON: `./gradlew :app:kspKotlinDebug`
+7. Verify with the migration test in `MigrationTest.kt`.
+
+### Testing migrations
+- Migration tests use Room's `MigrationTestHelper` (see `app/src/androidTest/.../MigrationTest.kt`).
+- Run migration tests: `./gradlew :app:connectedAndroidTest` or `./gradlew :app:testDebugUnitTest` (for unit-test-compatible checks).
+- Schema JSON is exported to `app/schemas/` at compile time by the Room KSP processor.

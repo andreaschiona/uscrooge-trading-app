@@ -9,6 +9,11 @@ plugins {
     id("jacoco")
 }
 
+// Room schema export directory — versioned for audit trail
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 jacoco {
     toolVersion = "0.8.11"
 }

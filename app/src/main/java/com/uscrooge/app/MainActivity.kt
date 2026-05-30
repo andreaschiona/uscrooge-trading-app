@@ -1,9 +1,14 @@
 package com.uscrooge.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.app.AlertDialog
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,9 +74,11 @@ class MainActivity : ComponentActivity() {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else {
                 scheduleBackgroundWork()
+                checkBatteryOptimization()
             }
         } else {
             scheduleBackgroundWork()
+            checkBatteryOptimization()
         }
 
         setContent {
@@ -110,6 +117,24 @@ class MainActivity : ComponentActivity() {
             val updateIntervalHours = config.updateCheckIntervalHours.toLong()
             UpdateCheckWorker.schedule(this@MainActivity, updateIntervalHours)
         }
+    }
+
+    private fun checkBatteryOptimization() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.battery_optimization_title)
+            .setMessage(R.string.battery_optimization_message)
+            .setPositiveButton(R.string.battery_optimization_allow) { _, _ ->
+                val intent = Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            }
+            .setNegativeButton(R.string.battery_optimization_skip, null)
+            .show()
     }
 }
 

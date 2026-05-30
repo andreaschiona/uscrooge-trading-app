@@ -6,4 +6,8 @@
     <string name="settings">Settings</string>
     <string name="notification_channel_name">Trading Signals</string>
     <string name="notification_channel_description">Receive notifications for trading signals and order execution</string>
+    <string name="battery_optimization_title">Disable battery optimization</string>
+    <string name="battery_optimization_message">For timely market analysis, UScrooge needs to run periodically in background. Please disable battery optimization for this app to ensure analysis runs on schedule.</string>
+    <string name="battery_optimization_skip">Skip</string>
+    <string name="battery_optimization_allow">Allow</string>
 </resources>

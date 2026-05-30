@@ -3,10 +3,8 @@ package com.uscrooge.app.worker
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.BackoffPolicy
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -238,15 +236,10 @@ class MarketAnalysisWorker @AssistedInject constructor(
         const val WORK_NAME = "market_analysis_work"
 
         fun schedule(context: Context, intervalMinutes: Long) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
-
             val work = PeriodicWorkRequestBuilder<MarketAnalysisWorker>(
                 intervalMinutes,
                 TimeUnit.MINUTES
             )
-                .setConstraints(constraints)
                 .setBackoffCriteria(
                     BackoffPolicy.LINEAR,
                     1,

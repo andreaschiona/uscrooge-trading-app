@@ -64,7 +64,11 @@ data class BacktestResult(
     val maxDrawdownPercent: Double,
     val averageTradeDuration: Long,
     val longestTradeDuration: Long,
-    val trades: List<BacktestTrade>
+    val trades: List<BacktestTrade>,
+    val buyAndHoldReturn: Double = 0.0,
+    val buyAndHoldReturnPercent: Double = 0.0,
+    val alpha: Double = 0.0,
+    val beta: Double = 0.0
 ) {
     fun summary(): String {
         return """
@@ -73,6 +77,8 @@ data class BacktestResult(
             Initial Balance: ${String.format("%.2f", initialBalance)}
             Final Balance: ${String.format("%.2f", finalBalance)}
             Total Return: ${String.format("%.2f", totalReturnPercent)}%
+            Buy & Hold Return: ${String.format("%.2f", buyAndHoldReturnPercent)}%
+            Alpha: ${String.format("%.2f", alpha)}%
             Total Trades: $totalTrades
             Win Rate: ${String.format("%.1f", winRate)}%
             Profit Factor: ${String.format("%.2f", profitFactor)}
@@ -101,5 +107,6 @@ data class BacktestConfig(
     val interval: Int = 60,
     val candleCount: Int = 1000,
     val slippagePercent: Double = 0.1,
-    val feePercent: Double = 0.26
+    val feePercent: Double = 0.26,
+    val useCompoundInterest: Boolean = false
 )

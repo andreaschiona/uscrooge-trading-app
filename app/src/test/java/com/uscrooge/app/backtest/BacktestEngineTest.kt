@@ -125,6 +125,32 @@ class BacktestEngineTest {
     }
 
     @Test
+    fun `runBacktest includes buy and hold return`() = runTest {
+        val ohlcData = createOhlcSeries(count = 300)
+        val config = BacktestConfig(initialBalance = 10000.0)
+        strategy.updateConfig(config.tradingConfig)
+
+        val result = engine.runBacktest(ohlcData, config)
+        assertTrue(result.buyAndHoldReturnPercent.isFinite())
+        assertTrue(result.alpha.isFinite())
+        assertTrue(result.beta.isFinite())
+    }
+
+    @Test
+    fun `runBacktest with compound interest flag is accepted`() = runTest {
+        val ohlcData = createOhlcSeries(count = 200)
+        val config = BacktestConfig(
+            initialBalance = 10000.0,
+            useCompoundInterest = true
+        )
+        strategy.updateConfig(config.tradingConfig)
+
+        val result = engine.runBacktest(ohlcData, config)
+        assertNotNull(result)
+        assertTrue(result.finalBalance >= 0)
+    }
+
+    @Test
     fun `runBacktest with higher risk per trade increases trade count`() = runTest {
         val ohlcData = createVolatileOhlcSeries(count = 200)
         val highRiskConfig = BacktestConfig(

@@ -135,6 +135,50 @@ class SignalStrengthTest {
         assertEquals(1.0, strength.trendScore, 0.001)
     }
 
+    @Test
+    fun `calculate with Ichimoku uses extended weights`() {
+        val analysis = createAnalysis(
+            rsi = RSI(value = 50.0),
+            macd = MACD(macdLine = 0.0, signalLine = 0.0, histogram = 0.0),
+            volume = VolumeAnalysis(100.0, 100.0, 1.0),
+            trend = Trend.SIDEWAYS,
+            ichimoku = Ichimoku(110.0, 100.0, 105.0, 95.0, 108.0),
+            fibonacci = FibonacciLevels(120.0, 80.0, 110.0, 105.0, 100.0, 95.0, 88.0, 130.0, 140.0, 0.5),
+            obv = OBV(1000.0, Trend.UPTREND, OBV.DivergenceSignal.NO_DIVERGENCE),
+            mfi = MFI(45.0)
+        )
+        val strength = SignalStrength.calculate(analysis)
+        assertTrue(strength.ichimokuScore > 0.5)
+        assertEquals(0.5, strength.fibonacciScore, 0.001)
+        assertTrue(strength.overall > 0)
+    }
+
+    @Test
+    fun `calculate with OBV bullish divergence returns max score`() {
+        val analysis = createAnalysis(
+            rsi = RSI(value = 50.0),
+            macd = MACD(macdLine = 0.0, signalLine = 0.0, histogram = 0.0),
+            volume = VolumeAnalysis(100.0, 100.0, 1.0),
+            trend = Trend.SIDEWAYS,
+            obv = OBV(1000.0, Trend.UPTREND, OBV.DivergenceSignal.BULLISH_DIVERGENCE)
+        )
+        val strength = SignalStrength.calculate(analysis)
+        assertEquals(1.0, strength.obvScore, 0.001)
+    }
+
+    @Test
+    fun `calculate with MFI oversold returns high MFI score`() {
+        val analysis = createAnalysis(
+            rsi = RSI(value = 50.0),
+            macd = MACD(macdLine = 0.0, signalLine = 0.0, histogram = 0.0),
+            volume = VolumeAnalysis(100.0, 100.0, 1.0),
+            trend = Trend.SIDEWAYS,
+            mfi = MFI(15.0)
+        )
+        val strength = SignalStrength.calculate(analysis)
+        assertEquals(1.0, strength.mfiScore, 0.001)
+    }
+
     private fun createAnalysis(
         rsi: RSI,
         macd: MACD,
@@ -142,7 +186,11 @@ class SignalStrengthTest {
         trend: Trend,
         bollingerBands: BollingerBands? = null,
         adx: ADX? = null,
-        stochasticRSI: StochasticRSI? = null
+        stochasticRSI: StochasticRSI? = null,
+        ichimoku: Ichimoku? = null,
+        fibonacci: FibonacciLevels? = null,
+        obv: OBV? = null,
+        mfi: MFI? = null
     ): TechnicalAnalysis = TechnicalAnalysis(
         pair = "BTC/EUR",
         timestamp = System.currentTimeMillis(),
@@ -156,6 +204,10 @@ class SignalStrengthTest {
         resistance = null,
         bollingerBands = bollingerBands,
         adx = adx,
-        stochasticRSI = stochasticRSI
+        stochasticRSI = stochasticRSI,
+        ichimoku = ichimoku,
+        fibonacci = fibonacci,
+        obv = obv,
+        mfi = mfi
     )
 }

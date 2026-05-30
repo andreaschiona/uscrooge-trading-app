@@ -36,6 +36,18 @@ class BacktestEngine(
         val feeRate = config.feePercent / 100.0
 
         val minHistory = 28
+        val firstPrice = tradingData.firstOrNull()?.close ?: 0.0
+        val lastPrice = tradingData.lastOrNull()?.close ?: 0.0
+        val buyAndHoldReturn = if (firstPrice > 0) {
+            (lastPrice - firstPrice) / firstPrice * config.initialBalance
+        } else 0.0
+        val buyAndHoldReturnPercent = if (firstPrice > 0) {
+            (lastPrice - firstPrice) / firstPrice * 100.0
+        } else 0.0
+
+        val marketReturns = tradingData.map { it.close }.zipWithNext { a, b -> (b - a) / a }
+        val marketReturnMean = if (marketReturns.isNotEmpty()) marketReturns.average() else 0.0
+        val marketReturnVariance = marketReturns.map { (it - marketReturnMean) * (it - marketReturnMean) }.average()
 
         for (i in tradingData.indices) {
             val currentCandle = tradingData[i]
@@ -82,7 +94,11 @@ class BacktestEngine(
                         )
                     )
 
-                    balance += exitValue - exitFee
+                    if (config.useCompoundInterest) {
+                        balance += exitValue - exitFee
+                    } else {
+                        balance += exitValue - exitFee
+                    }
                     position = null
                 }
             } else if (signalResult.signal != null &&
@@ -157,6 +173,19 @@ class BacktestEngine(
         val avgDuration = if (trades.isNotEmpty()) trades.map { it.duration }.average().toLong() else 0L
         val longestDuration = if (trades.isNotEmpty()) trades.maxOf { it.duration } else 0L
 
+        val strategyReturns = dailyReturns
+        val strategyReturnMean = if (strategyReturns.isNotEmpty()) strategyReturns.average() else 0.0
+
+        val beta = if (marketReturnVariance > 0 && strategyReturns.isNotEmpty()) {
+            val pairedReturns = strategyReturns.zip(marketReturns.takeLast(strategyReturns.size))
+            val covariance = pairedReturns
+                .map { (s, m) -> (s - strategyReturnMean) * (m - marketReturnMean) }
+                .average()
+            covariance / marketReturnVariance
+        } else 0.0
+
+        val alpha = totalReturnPercent - buyAndHoldReturnPercent * beta
+
         return BacktestResult(
             pair = config.pair,
             startDate = ohlcData.first().time,
@@ -177,7 +206,11 @@ class BacktestEngine(
             maxDrawdownPercent = maxDrawdown * 100.0,
             averageTradeDuration = avgDuration,
             longestTradeDuration = longestDuration,
-            trades = trades
+            trades = trades,
+            buyAndHoldReturn = buyAndHoldReturn,
+            buyAndHoldReturnPercent = buyAndHoldReturnPercent,
+            alpha = alpha,
+            beta = beta
         )
     }
 

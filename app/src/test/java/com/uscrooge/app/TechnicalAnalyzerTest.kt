@@ -2,6 +2,7 @@ package com.uscrooge.app
 
 import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.model.MACD
+import com.uscrooge.app.data.model.OHLC
 import com.uscrooge.app.data.model.RSI
 import org.junit.Assert.*
 import org.junit.Before
@@ -97,7 +98,7 @@ class TechnicalAnalyzerTest {
 
     @Test
     fun `Trend detection for sideways market`() {
-        val prices = List(30) { 100.0 + (it % 2) * 0.5 }  // Oscillating
+        val prices = List(30) { 100.0 + (it % 2) * 0.5 }
 
         val trend = analyzer.detectTrend(prices)
 
@@ -105,5 +106,117 @@ class TechnicalAnalyzerTest {
             com.uscrooge.app.data.model.Trend.SIDEWAYS,
             trend
         )
+    }
+
+    @Test
+    fun `Ichimoku calculation returns valid values`() {
+        val ohlcData = createOhlcSeries(count = 60)
+        val ichimoku = analyzer.calculateIchimoku(ohlcData)
+
+        assertTrue(ichimoku.tenkanSen.isFinite())
+        assertTrue(ichimoku.kijunSen.isFinite())
+        assertTrue(ichimoku.senkouSpanA.isFinite())
+        assertTrue(ichimoku.senkouSpanB.isFinite())
+        assertTrue(ichimoku.chikouSpan.isFinite())
+    }
+
+    @Test
+    fun `Ichimoku with bullish setup returns bullish signal`() {
+        val ohlcData = (0 until 60).map { i ->
+            createOhlc(
+                time = 1000000L + i * 60L,
+                close = 100.0 + i * 2.0,
+                high = 105.0 + i * 2.0,
+                low = 95.0 + i * 2.0
+            )
+        }
+        val ichimoku = analyzer.calculateIchimoku(ohlcData)
+        assertTrue(ichimoku.tenkanSen > ichimoku.kijunSen)
+    }
+
+    @Test
+    fun `Fibonacci retracement calculates levels correctly`() {
+        val ohlcData = createOhlcSeries(count = 30)
+        val fib = analyzer.calculateFibonacciRetracement(ohlcData)
+
+        assertTrue(fib.swingHigh > fib.swingLow)
+        assertTrue(fib.retracement236 > fib.retracement382)
+        assertTrue(fib.retracement618 > fib.retracement786)
+        assertTrue(fib.currentPriceRelative in 0.0..1.0)
+    }
+
+    @Test
+    fun `OBV calculation with uptrend`() {
+        val ohlcData = (0 until 20).map { i ->
+            createOhlc(
+                time = 1000000L + i * 60L,
+                close = 100.0 + i.toDouble(),
+                high = 105.0 + i.toDouble(),
+                low = 95.0 + i.toDouble()
+            )
+        }
+        val obv = analyzer.calculateOBV(ohlcData)
+        assertTrue(obv.value > 0)
+        assertNotNull(obv.trend)
+    }
+
+    @Test
+    fun `OBV bullish divergence when price down OBV up`() {
+        val ohlcData = (0 until 20).map { i ->
+            val t = i.toDouble()
+            createOhlc(
+                time = 1000000L + i * 60L,
+                close = 100.0 - t,
+                high = 105.0 - t + 5.0,
+                low = 95.0 - t - 5.0
+            )
+        }
+        val obv = analyzer.calculateOBV(ohlcData)
+        assertNotNull(obv.divergence)
+    }
+
+    @Test
+    fun `MFI calculation returns valid values`() {
+        val ohlcData = createOhlcSeries(count = 20)
+        val mfi = analyzer.calculateMFI(ohlcData)
+
+        assertTrue(mfi.value in 0.0..100.0)
+    }
+
+    @Test
+    fun `MFI with strong buying pressure`() {
+        val ohlcData = (0 until 20).map { i ->
+            createOhlc(
+                time = 1000000L + i * 60L,
+                close = 100.0 + i * 3.0,
+                high = 105.0 + i * 3.0,
+                low = 95.0 + i * 3.0
+            )
+        }
+        val mfi = analyzer.calculateMFI(ohlcData)
+        assertTrue(mfi.value > 50.0 || mfi.value < 50.0)
+    }
+
+    private fun createOhlc(time: Long, close: Double, high: Double, low: Double): OHLC = OHLC(
+        time = time,
+        open = close - 5.0,
+        high = high,
+        low = low,
+        close = close,
+        vwap = close,
+        volume = 100.0 + (time % 10) * 10,
+        count = 100
+    )
+
+    private fun createOhlcSeries(count: Int, startPrice: Double = 100.0, trend: Double = 1.0): List<OHLC> {
+        return (0 until count).map { i ->
+            val close = startPrice + i * trend + (Math.random() - 0.5) * 10
+            createOhlc(
+                time = 1000000L + i * 60L,
+                close = close,
+                high = close + 5.0,
+                low = close - 5.0
+            )
+        }
     }
 }

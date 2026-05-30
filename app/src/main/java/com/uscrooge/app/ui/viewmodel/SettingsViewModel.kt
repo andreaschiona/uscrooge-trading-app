@@ -281,7 +281,21 @@ class SettingsViewModel @Inject constructor(
             is SSLException ->
                 "Secure connection to Alpaca failed. Check device date/time and network."
 
+            is com.google.gson.JsonSyntaxException, is java.lang.ClassCastException,
+                is IllegalStateException ->
+                mapAlpacaGsonError(message, errorType)
+
             else -> mapAlpacaMessage(message, errorType)
+        }
+    }
+
+    private fun mapAlpacaGsonError(message: String, errorType: String): String {
+        return when {
+            message.contains("Expected", ignoreCase = true) ||
+                message.contains("unexpected", ignoreCase = true) ->
+                "Alpaca API returned an unexpected response format. The server might be having issues."
+            else ->
+                "Alpaca API returned a malformed response. Check Alpaca API status and try again."
         }
     }
 
@@ -294,6 +308,10 @@ class SettingsViewModel @Inject constructor(
             message.contains("unauthorized", ignoreCase = true) ||
                 message.contains("forbidden", ignoreCase = true) ->
                 "Alpaca API key is valid but access is denied. Check permissions."
+
+            errorType == "ClassCastException" || errorType == "JsonSyntaxException" ||
+                message.contains("cannot be cast", ignoreCase = true) ->
+                "Alpaca API returned an unexpected response format. Check Alpaca API status and try again."
 
             message.isBlank() ->
                 "Unable to verify Alpaca credentials. Check internet connection. (type: $errorType)"

@@ -24,12 +24,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.ui.onboarding.OnboardingScreen
 import com.uscrooge.app.ui.screen.DashboardScreen
 import com.uscrooge.app.ui.screen.SettingsScreen
 import com.uscrooge.app.ui.screen.SignalsScreen
 import com.uscrooge.app.ui.screen.TradeJournalScreen
 import com.uscrooge.app.ui.theme.UScroogeAppTheme
 import com.uscrooge.app.ui.viewmodel.DashboardViewModel
+import com.uscrooge.app.ui.viewmodel.OnboardingViewModel
 import com.uscrooge.app.ui.viewmodel.SettingsViewModel
 import com.uscrooge.app.ui.viewmodel.SignalsViewModel
 import com.uscrooge.app.ui.viewmodel.TradeJournalViewModel
@@ -74,8 +76,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val config by configRepository.configFlow.collectAsState(initial = TradingConfig())
+            var onboardingDone by remember { mutableStateOf(false) }
+            val showOnboarding = !config.onboardingCompleted && !onboardingDone
+
             UScroogeAppTheme(darkTheme = config.useDarkMode) {
-                MainScreen(configRepository = configRepository)
+                if (showOnboarding) {
+                    val onboardingViewModel: OnboardingViewModel = hiltViewModel()
+                    OnboardingScreen(
+                        viewModel = onboardingViewModel,
+                        onComplete = {
+                            onboardingDone = true
+                        }
+                    )
+                } else {
+                    MainScreen(configRepository = configRepository)
+                }
             }
         }
     }

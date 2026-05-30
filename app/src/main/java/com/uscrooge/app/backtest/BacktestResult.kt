@@ -2,6 +2,7 @@ package com.uscrooge.app.backtest
 
 import com.uscrooge.app.data.model.OHLC
 import com.uscrooge.app.data.model.TradingConfig
+import java.util.Locale
 
 data class WalkForwardResult(
     val windows: List<WalkForwardWindow>,
@@ -73,17 +74,17 @@ data class BacktestResult(
     fun summary(): String {
         return """
             Backtest Result for $pair:
-            Period: ${java.text.SimpleDateFormat("yyyy-MM-dd").format(startDate)} to ${java.text.SimpleDateFormat("yyyy-MM-dd").format(endDate)}
-            Initial Balance: ${String.format("%.2f", initialBalance)}
-            Final Balance: ${String.format("%.2f", finalBalance)}
-            Total Return: ${String.format("%.2f", totalReturnPercent)}%
-            Buy & Hold Return: ${String.format("%.2f", buyAndHoldReturnPercent)}%
-            Alpha: ${String.format("%.2f", alpha)}%
+            Period: ${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(startDate)} to ${java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(endDate)}
+            Initial Balance: ${String.format(Locale.US, "%.2f", initialBalance)}
+            Final Balance: ${String.format(Locale.US, "%.2f", finalBalance)}
+            Total Return: ${String.format(Locale.US, "%.2f", totalReturnPercent)}%
+            Buy & Hold Return: ${String.format(Locale.US, "%.2f", buyAndHoldReturnPercent)}%
+            Alpha: ${String.format(Locale.US, "%.2f", alpha)}%
             Total Trades: $totalTrades
-            Win Rate: ${String.format("%.1f", winRate)}%
-            Profit Factor: ${String.format("%.2f", profitFactor)}
-            Sharpe Ratio: ${String.format("%.2f", sharpeRatio)}
-            Max Drawdown: ${String.format("%.2f", maxDrawdownPercent)}%
+            Win Rate: ${String.format(Locale.US, "%.1f", winRate)}%
+            Profit Factor: ${String.format(Locale.US, "%.2f", profitFactor)}
+            Sharpe Ratio: ${String.format(Locale.US, "%.2f", sharpeRatio)}
+            Max Drawdown: ${String.format(Locale.US, "%.2f", maxDrawdownPercent)}%
         """.trimIndent()
     }
 }

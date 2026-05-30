@@ -26,6 +26,7 @@ fun SettingsScreen(
 ) {
     val config by viewModel.config.collectAsState()
     val saveState by viewModel.saveState.collectAsState()
+    val updateCheckState by viewModel.updateCheckState.collectAsState()
 
     var editedConfig by remember { mutableStateOf<TradingConfig?>(null) }
 
@@ -412,9 +413,9 @@ fun SettingsScreen(
                             Button(
                                 onClick = { viewModel.checkForUpdates() },
                                 modifier = Modifier.fillMaxWidth(),
-                                enabled = viewModel.updateCheckState.value !is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking
+                                enabled = updateCheckState !is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking
                             ) {
-                                if (viewModel.updateCheckState.value is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking) {
+                                if (updateCheckState is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Checking) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(20.dp),
                                         color = MaterialTheme.colorScheme.onPrimary,
@@ -425,20 +426,21 @@ fun SettingsScreen(
                                 Text("Check Now")
                             }
 
-                            val state = viewModel.updateCheckState.value
-                            if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Available) {
+                            if (updateCheckState is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Available) {
+                                val availableState = updateCheckState as com.uscrooge.app.ui.viewmodel.UpdateCheckState.Available
                                 Text(
-                                    text = "Update ${state.version} available!",
+                                    text = "Update ${availableState.version} available!",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = state.releaseNotes.take(300),
+                                    text = availableState.releaseNotes.take(300),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 5
                                 )
-                            } else if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate) {
+                            } else if (updateCheckState is com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate) {
+                                val upToDateState = updateCheckState as com.uscrooge.app.ui.viewmodel.UpdateCheckState.UpToDate
                                 Text(
                                     text = "You have the latest version",
                                     style = MaterialTheme.typography.bodySmall,
@@ -447,15 +449,16 @@ fun SettingsScreen(
                                 val dateStr = java.text.SimpleDateFormat(
                                     "dd/MM/yyyy HH:mm",
                                     java.util.Locale.getDefault()
-                                ).format(java.util.Date(state.lastCheckDate))
+                                ).format(java.util.Date(upToDateState.lastCheckDate))
                                 Text(
                                     text = "Verified at $dateStr",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            } else if (state is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Error) {
+                            } else if (updateCheckState is com.uscrooge.app.ui.viewmodel.UpdateCheckState.Error) {
+                                val errorState = updateCheckState as com.uscrooge.app.ui.viewmodel.UpdateCheckState.Error
                                 Text(
-                                    text = state.message,
+                                    text = errorState.message,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )

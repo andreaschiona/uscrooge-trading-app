@@ -15,7 +15,7 @@ import com.uscrooge.app.data.model.*
         TradeJournalEntry::class,
         AuditLogEntry::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class TradingDatabase : RoomDatabase() {

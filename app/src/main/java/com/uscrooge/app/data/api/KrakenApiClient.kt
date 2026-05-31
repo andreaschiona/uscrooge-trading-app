@@ -50,6 +50,9 @@ class KrakenApiClient(
     @Volatile
     private var cachedLotDecimals: Map<String, Int> = emptyMap()
 
+    @Volatile
+    private var cachedOrderMinimum: Map<String, Double> = emptyMap()
+
     companion object {
         private const val PAIRS_CACHE_MS = 60 * 60 * 1000L // 1 hour
         // Kraken requires strictly-increasing nonces per API key. Unit is
@@ -423,6 +426,7 @@ class KrakenApiClient(
                     if (info != null) {
                         cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
                         cachedLotDecimals = cachedLotDecimals + (krakenSymbol to info.lot_decimals)
+                        cachedOrderMinimum = cachedOrderMinimum + (krakenSymbol to (info.ordermin?.toDoubleOrNull() ?: 0.0))
                         return info.pair_decimals
                     }
                 }
@@ -444,6 +448,7 @@ class KrakenApiClient(
                     if (info != null) {
                         cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
                         cachedLotDecimals = cachedLotDecimals + (krakenSymbol to info.lot_decimals)
+                        cachedOrderMinimum = cachedOrderMinimum + (krakenSymbol to (info.ordermin?.toDoubleOrNull() ?: 0.0))
                         return info.lot_decimals
                     }
                 }
@@ -451,6 +456,28 @@ class KrakenApiClient(
             8
         } catch (e: Exception) {
             8
+        }
+    }
+
+    private suspend fun getOrderMinimum(krakenSymbol: String): Double {
+        cachedOrderMinimum[krakenSymbol]?.let { return it }
+        return try {
+            val response = getApiService().getAssetPairs(pair = krakenSymbol)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                if (body.error.isEmpty() && body.result != null) {
+                    val info = body.result.values.firstOrNull()
+                    if (info != null) {
+                        cachedOrderMinimum = cachedOrderMinimum + (krakenSymbol to (info.ordermin?.toDoubleOrNull() ?: 0.0))
+                        cachedPairDecimals = cachedPairDecimals + (krakenSymbol to info.pair_decimals)
+                        cachedLotDecimals = cachedLotDecimals + (krakenSymbol to info.lot_decimals)
+                        return info.ordermin?.toDoubleOrNull() ?: 0.0
+                    }
+                }
+            }
+            0.0
+        } catch (e: Exception) {
+            0.0
         }
     }
 
@@ -471,6 +498,11 @@ class KrakenApiClient(
             }
             val lotDecimals = getLotDecimals(krakenPair)
             val formattedVolume = String.format(Locale.US, "%.${lotDecimals}f", volume)
+
+            val orderMinimum = getOrderMinimum(krakenPair)
+            if (orderMinimum > 0.0 && volume < orderMinimum) {
+                return Result.failure(Exception("Volume $volume for $krakenPair is below minimum $orderMinimum"))
+            }
 
             val response = getApiService().addOrder(
                 nonce = nonce,

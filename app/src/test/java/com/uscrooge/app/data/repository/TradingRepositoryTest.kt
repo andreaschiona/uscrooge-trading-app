@@ -14,6 +14,7 @@ import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.strategy.PositionSelectionStrategy
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
 import io.mockk.*
@@ -37,6 +38,7 @@ class TradingRepositoryTest {
     private val fearGreedService: FearGreedService = mockk()
     private val sentimentAnalyzer: SentimentAnalyzer = mockk()
     private val gitHubIssueReporter: GitHubIssueReporter = mockk()
+    private val positionSelectionStrategy: PositionSelectionStrategy = mockk()
 
     private lateinit var repository: TradingRepository
 
@@ -58,6 +60,11 @@ class TradingRepositoryTest {
         }
         every { context.applicationContext } returns context
 
+        every { krakenApiClient.updateCredentials(any(), any(), any()) } returns Unit
+        every { alpacaApiClient.updateCredentials(any(), any(), any()) } returns Unit
+        every { positionDao.getOpenPositions() } returns flowOf(emptyList())
+        coEvery { krakenApiClient.getAvailablePairs(any()) } returns emptyList()
+
         repository = TradingRepository(
             context = context,
             krakenApiClient = krakenApiClient,
@@ -70,7 +77,8 @@ class TradingRepositoryTest {
             gson = gson,
             fearGreedService = fearGreedService,
             sentimentAnalyzer = sentimentAnalyzer,
-            gitHubIssueReporter = gitHubIssueReporter
+            gitHubIssueReporter = gitHubIssueReporter,
+            positionSelectionStrategy = positionSelectionStrategy
         )
     }
 
@@ -112,5 +120,61 @@ class TradingRepositoryTest {
         coEvery { signalDao.updateSignal(signal) } returns Unit
         repository.updateSignal(signal)
         coVerify { signalDao.updateSignal(signal) }
+    }
+
+    @Test
+    fun `analyzeAllPairs calls positionSelectionStrategy when enabled`() = runTest {
+        val mockRankings = listOf(
+            AssetRanking(
+                coinId = "bitcoin", symbol = "BTC", name = "Bitcoin",
+                currentPrice = 50000.0, marketCapRank = 1, marketCap = 1e12,
+                volume24h = 5e10, volumeToMarketCapRatio = 0.05,
+                priceChange1h = 2.0, priceChange24h = 5.0, priceChange7d = 10.0,
+                volatilityScore = 0.5, liquidityScore = 0.9,
+                momentumScore = 0.7, compositeScore = 0.72, rank = 1
+            )
+        )
+        coEvery { positionSelectionStrategy.selectTopPositions(any(), any()) } returns Result.success(mockRankings)
+
+        val config = TradingConfig(
+            enablePositionSelection = true,
+            tradingPairs = emptyList(),
+            maxCryptoPairsToScan = 0
+        )
+
+        val signals = repository.analyzeAllPairs(config)
+
+        assertTrue("Should return empty signals with maxCryptoPairsToScan=0", signals.isEmpty())
+        coVerify(exactly = 1) { positionSelectionStrategy.selectTopPositions(any(), any()) }
+    }
+
+    @Test
+    fun `analyzeAllPairs does NOT call positionSelectionStrategy when disabled`() = runTest {
+        val config = TradingConfig(
+            enablePositionSelection = false,
+            tradingPairs = emptyList(),
+            maxCryptoPairsToScan = 0
+        )
+
+        val signals = repository.analyzeAllPairs(config)
+
+        assertTrue("Should return empty signals with maxCryptoPairsToScan=0", signals.isEmpty())
+        coVerify(exactly = 0) { positionSelectionStrategy.selectTopPositions(any(), any()) }
+    }
+
+    @Test
+    fun `analyzeAllPairs falls back to wishlist when positionSelection fails`() = runTest {
+        coEvery { positionSelectionStrategy.selectTopPositions(any(), any()) } returns
+            Result.failure(Exception("API error"))
+
+        val config = TradingConfig(
+            enablePositionSelection = true,
+            tradingPairs = listOf("BTC/EUR"),
+            maxCryptoPairsToScan = 5
+        )
+
+        val signals = repository.analyzeAllPairs(config)
+
+        coVerify(exactly = 1) { positionSelectionStrategy.selectTopPositions(any(), any()) }
     }
 }

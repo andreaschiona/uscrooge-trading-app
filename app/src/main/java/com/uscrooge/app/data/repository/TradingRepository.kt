@@ -16,8 +16,10 @@ import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.strategy.PositionSelectionStrategy
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
+import kotlinx.coroutines.flow.first
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -42,7 +44,8 @@ class TradingRepository @Inject constructor(
     private val gson: Gson,
     private val fearGreedService: FearGreedService,
     private val sentimentAnalyzer: SentimentAnalyzer,
-    private val gitHubIssueReporter: GitHubIssueReporter
+    private val gitHubIssueReporter: GitHubIssueReporter,
+    private val positionSelectionStrategy: PositionSelectionStrategy
 ) {
     companion object {
         private const val TAG = "TradingRepository"
@@ -433,18 +436,46 @@ class TradingRepository @Inject constructor(
         } else null
 
         // Build crypto list: wishlist always included, supplemented by dynamic Kraken pairs
+        // or CoinGecko-powered position selection when enabled.
         val cryptoPairsToAnalyze = run {
-            val quoteCurrency = config.tradingPairs.firstOrNull()
-                ?.substringAfter("/")?.uppercase() ?: "EUR"
-            val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
             val wishlistPairs = config.tradingPairs.map { it.uppercase() }.toSet()
-            (wishlistPairs + dynamicKrakenPairs)
-                .distinct()
-                .sortedWith(compareByDescending { it in wishlistPairs })
-                .take(config.maxCryptoPairsToScan)
-                .also { scanned ->
-                    Log.d(TAG, "Analyzing ${scanned.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
+
+            if (config.enablePositionSelection) {
+                val rankingConfig = config.toAssetRankingConfig()
+                val currentPositions = positionDao.getOpenPositions().first()
+                val rankingResult = positionSelectionStrategy.selectTopPositions(
+                    currentPositions = currentPositions,
+                    config = rankingConfig
+                )
+
+                if (rankingResult.isSuccess) {
+                    val rankedAssets = rankingResult.getOrNull()!!
+                    val rankedPairs = rankedAssets.map { "${it.symbol}/EUR" }
+                    val combined = (wishlistPairs + rankedPairs)
+                        .distinct()
+                        .take(config.maxCryptoPairsToScan)
+                    Log.d(TAG, "Position selection: ranked ${rankedAssets.size} assets, analyzing ${combined.size} pairs (wishlist + ranked)")
+                    combined
+                } else {
+                    val fallbackPairs = (wishlistPairs + krakenApiClient.getAvailablePairs("EUR"))
+                        .distinct()
+                        .sortedWith(compareByDescending { it in wishlistPairs })
+                        .take(config.maxCryptoPairsToScan)
+                    Log.d(TAG, "Position selection failed, fallback to ${fallbackPairs.size} pairs")
+                    fallbackPairs
                 }
+            } else {
+                val quoteCurrency = config.tradingPairs.firstOrNull()
+                    ?.substringAfter("/")?.uppercase() ?: "EUR"
+                val dynamicKrakenPairs = krakenApiClient.getAvailablePairs(quoteCurrency)
+                (wishlistPairs + dynamicKrakenPairs)
+                    .distinct()
+                    .sortedWith(compareByDescending { it in wishlistPairs })
+                    .take(config.maxCryptoPairsToScan)
+                    .also { scanned ->
+                        Log.d(TAG, "Analyzing ${scanned.size} crypto pairs (${wishlistPairs.size} wishlist + dynamic from Kraken, capped at ${config.maxCryptoPairsToScan})")
+                    }
+            }
         }
 
         for (pair in cryptoPairsToAnalyze) {
@@ -975,4 +1006,18 @@ class TradingRepository @Inject constructor(
         updateSignal(signal.copy(status = SignalStatus.MISSED))
         Log.d(TAG, "Signal ${signal.id} for ${signal.pair} marked as MISSED")
     }
+}
+
+fun TradingConfig.toAssetRankingConfig(): AssetRankingConfig {
+    return AssetRankingConfig(
+        vsCurrency = "usd",
+        scanLimit = positionSelectionScanLimit,
+        minMarketCap = positionSelectionMinMarketCap,
+        minVolume24h = positionSelectionMinVolume,
+        maxAssetsToRank = positionSelectionMaxResults,
+        volumeWeight = positionSelectionVolumeWeight,
+        momentumWeight = positionSelectionMomentumWeight,
+        liquidityWeight = positionSelectionLiquidityWeight,
+        volatilityWeight = positionSelectionVolatilityWeight
+    )
 }

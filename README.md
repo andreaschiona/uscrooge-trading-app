@@ -7,6 +7,7 @@ An Android application for automated trading across cryptocurrency (Kraken) and 
 - **Multi-Broker Support** - Trade crypto on Kraken and stocks on Alpaca from a single dashboard
 - **Automated Trading** - Fully autonomous trade execution based on configurable signal strength thresholds
 - **Dynamic Symbol Discovery** - Crypto pairs fetched live from Kraken's public API; stocks from Alpaca's asset catalogue. User wishlist is always scanned first; remaining slots filled dynamically up to a configurable cap
+- **CoinGecko Market Scanning** - Optional free-tier position selection via CoinGecko API scores top 100 cryptocurrencies by momentum, liquidity, and volatility, automatically discovering new trading opportunities beyond the user wishlist
 - **Multi-Indicator Strategy** - RSI, MACD, Bollinger Bands, ADX, Stochastic RSI, volume analysis, candlestick patterns, support/resistance
 - **Multi-Timeframe Confirmation** - Signals validated against higher timeframe trends (1h, 4h, daily) to reduce false entries
 - **Smart Order Execution** - Limit orders for moderate signals (lower fees), market orders for strong signals (immediate fill)
@@ -39,12 +40,48 @@ scan_list = union(user_wishlist, dynamic_api_list)
 
 User-configured pairs are always scanned regardless of whether they appear in the live API list (useful for pairs added to Kraken/Alpaca after the cache was populated). The dynamic list fills remaining capacity up to the configured cap. Both lists are cached for 1 hour to avoid excessive API calls.
 
+### Position Selection Strategy (CoinGecko)
+
+When `enablePositionSelection` is enabled in Settings, the crypto scanning list is augmented with assets discovered via the **CoinGecko free API** (keyless, 10K requests/month, 100 req/min). This allows the app to find new trading opportunities beyond the user's wishlist and Kraken's dynamic pairs.
+
+**How it works:**
+
+```text
+CoinGecko top 100 coins (by 24h volume)
+  → filter: min market cap ($10M) + min volume ($1M)
+  → multi-factor scoring (composite):
+      - Momentum (1h/24h/7d price changes) = 35%
+      - Liquidity (market cap, volume, vol/cap ratio) = 25%
+      - Volatility (absolute price changes) = 20%
+      - Volume weight = 20%
+  → rank by composite score, take top N (default 20)
+  → exclude currently held positions
+  → merge with user wishlist
+  → analyze using existing TA pipeline
+```
+
+The scan runs every cycle alongside normal analysis. If CoinGecko is unreachable, the app falls back to the standard wishlist + Kraken dynamic pair list.
+
+**Configuration** (via `TradingConfig` / Settings UI):
+
+| Parameter | Default | Description |
+| ----------- | --------- | ------------- |
+| enablePositionSelection | false | Enable automatic market scanning |
+| positionSelectionMinMarketCap | $10M | Minimum market cap filter |
+| positionSelectionMinVolume | $1M | Minimum 24h volume filter |
+| positionSelectionScanLimit | 100 | Number of coins to scan |
+| positionSelectionMaxResults | 20 | Top N assets to rank |
+| positionSelectionMomentumWeight | 0.35 | Momentum scoring weight |
+| positionSelectionLiquidityWeight | 0.25 | Liquidity scoring weight |
+| positionSelectionVolatilityWeight | 0.20 | Volatility scoring weight |
+| positionSelectionVolumeWeight | 0.20 | Volume scoring weight |
+
 ## Trading Strategy
 
 UScrooge uses a composite scoring system that combines multiple technical indicators:
 
 | Indicator | Weight | Signal |
-|-----------|--------|--------|
+| ----------- | -------- | -------- |
 | RSI (14) | 20% | Oversold <30 = buy, Overbought >70 = sell |
 | MACD (12/26/9) | 20% | Crossover detection and momentum direction |
 | Bollinger Bands (20, 2σ) | 10% | Price near lower band = buy, upper = sell |
@@ -69,7 +106,7 @@ UScrooge uses a composite scoring system that combines multiple technical indica
 
 ## Project Structure
 
-```
+```text
 app/src/main/java/com/uscrooge/app/
 ├── USCroogeApplication.kt          # Application entry point
 ├── MainActivity.kt                 # Compose UI entry
@@ -84,11 +121,15 @@ app/src/main/java/com/uscrooge/app/
 │   │   ├── KrakenWebSocketClient.kt # Real-time WebSocket streaming
 │   │   ├── AlpacaApiClient.kt      # Alpaca REST API client
 │   │   ├── AlpacaApiService.kt     # Alpaca Retrofit interface
-│   │   └── AlpacaAuthInterceptor.kt # Header-based authentication
+│   │   ├── AlpacaAuthInterceptor.kt # Header-based authentication
+│   │   ├── CoinGeckoApiClient.kt   # CoinGecko REST client (keyless, free tier)
+│   │   └── CoinGeckoApiService.kt  # CoinGecko Retrofit interface
 │   ├── local/
 │   │   ├── TradingDao.kt           # Room DAOs
 │   │   └── TradingDatabase.kt      # Room database
-│   ├── model/                      # Data classes and enums
+│   ├── model/
+│   │   ├── AssetRanking.kt         # Position selection scoring models
+│   │   └── ...                     # Other data classes and enums
 │   └── repository/
 │       ├── ConfigRepository.kt     # DataStore preferences
 │       └── TradingRepository.kt    # Multi-broker market data + signal orchestration
@@ -102,7 +143,8 @@ app/src/main/java/com/uscrooge/app/
 ├── notification/
 │   └── NotificationHelper.kt      # Push notifications
 ├── strategy/
-│   └── TradingStrategy.kt         # Signal generation + exit conditions
+│   ├── TradingStrategy.kt         # Signal generation + exit conditions
+│   └── PositionSelectionStrategy.kt # CoinGecko-powered market opportunity ranking
 ├── ui/                            # Compose screens (Dashboard, Signals, Settings)
 └── worker/
     └── MarketAnalysisWorker.kt    # Background periodic analysis
@@ -170,7 +212,7 @@ After installation, open the app and navigate to **Settings**:
 ### Key Parameters
 
 | Parameter | Default | Description |
-|-----------|---------|-------------|
+| ----------- | --------- | ------------- |
 | Automatic Trading | OFF | Enable autonomous execution |
 | Crypto Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Wishlist — always scanned, plus dynamic Kraken pairs fill remaining slots |
 | Stock Symbols | AAPL/USD, MSFT/USD, GOOGL/USD | Wishlist — always scanned, plus dynamic Alpaca assets fill remaining slots |
@@ -187,6 +229,11 @@ After installation, open the app and navigate to **Settings**:
 | Use Limit Orders | ON | Use limit orders for moderate signals |
 | Circuit Breaker | ON | Auto-halt on excessive losses |
 | Max Daily Drawdown | 5% | Drawdown threshold for halt |
+| Enable Position Selection | OFF | Auto-scan CoinGecko for trading opportunities |
+| Position Selection Min Market Cap | $10M | Minimum market cap for new assets |
+| Position Selection Min Volume | $1M | Minimum 24h volume for new assets |
+| Position Selection Scan Limit | 100 | Number of coins to scan per cycle |
+| Position Selection Max Results | 20 | Top ranked assets to include |
 | Check Interval | 300s | Analysis frequency |
 
 ### Dashboard

@@ -3,6 +3,7 @@ package com.uscrooge.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
+import com.uscrooge.app.BuildConfig
 import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.data.model.Position
 import com.uscrooge.app.data.model.SystemHealth
@@ -10,6 +11,7 @@ import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.executor.OrderExecutor
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.ui.screen.PieSlice
 import com.uscrooge.app.ui.screen.presetColors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +27,8 @@ class DashboardViewModel @Inject constructor(
     private val repository: TradingRepository,
     private val configRepository: ConfigRepository,
     private val healthCheckRepository: HealthCheckRepository,
-    private val orderExecutor: OrderExecutor
+    private val orderExecutor: OrderExecutor,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<DashboardUiState>(DashboardUiState.Loading)
@@ -55,6 +58,21 @@ class DashboardViewModel @Inject constructor(
                 _uiState.value = DashboardUiState.Success(portfolio, positions)
             } catch (e: Exception) {
                 _uiState.value = DashboardUiState.Error(e.message ?: "Unknown error")
+                gitHubIssueReporter.reportError(
+                    title = "Dashboard load failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${e.message}")
+                        appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported", "api")
+                )
             }
         }
     }
@@ -68,6 +86,22 @@ class DashboardViewModel @Inject constructor(
             orderExecutor.closePosition(position)
                 .onFailure { e ->
                     Log.e("DashboardViewModel", "Failed to close position: ${e.message}", e)
+                    gitHubIssueReporter.reportError(
+                        title = "Position close failed",
+                        body = buildString {
+                            appendLine("## Contesto Errore")
+                            appendLine()
+                            appendLine("**Errore:** ${e.message}")
+                            appendLine("**Pair:** ${position.pair}")
+                            appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                            appendLine()
+                            appendLine("---")
+                            appendLine()
+                            appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                        },
+                        labels = listOf("bug", "auto-reported", "trading")
+                    )
                 }
             loadDashboard()
         }

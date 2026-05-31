@@ -12,6 +12,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.notification.NotificationHelper
 import com.uscrooge.app.update.UpdateChecker
 import dagger.assisted.Assisted
@@ -24,7 +25,8 @@ class UpdateCheckWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val configRepository: ConfigRepository,
-    private val notificationHelper: NotificationHelper
+    private val notificationHelper: NotificationHelper,
+    private val gitHubIssueReporter: GitHubIssueReporter
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -57,6 +59,21 @@ class UpdateCheckWorker @AssistedInject constructor(
                 }
             }.onFailure { error ->
                 Log.w("UpdateCheckWorker", "Check failed: ${error.message}")
+                gitHubIssueReporter.reportError(
+                    title = "Update check failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${error.message}")
+                        appendLine("**Versione App:** ${com.uscrooge.app.BuildConfig.VERSION_NAME} (${com.uscrooge.app.BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported", "update-check")
+                )
             }
 
             Result.success()

@@ -19,7 +19,6 @@ import com.uscrooge.app.integration.GitHubIssueReporter
 import com.uscrooge.app.strategy.PositionSelectionStrategy
 import com.uscrooge.app.strategy.SignalResult
 import com.uscrooge.app.strategy.TradingStrategy
-import kotlinx.coroutines.flow.first
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

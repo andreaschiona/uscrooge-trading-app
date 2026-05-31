@@ -53,6 +53,7 @@ class SignalsViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 _uiState.value = SignalsUiState.Error(e.message ?: "Unknown error")
+                reportErrorToGitHub("Failed to load signals", e)
             }
         }
     }
@@ -120,12 +121,37 @@ class SignalsViewModel @Inject constructor(
         }
     }
 
+    private suspend fun reportErrorToGitHub(context: String, error: Throwable?) {
+        if (!gitHubIssueReporter.isConfigured()) return
+        val title = "[${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}] $context"
+        val body = buildString {
+            appendLine("## Contesto Errore")
+            appendLine()
+            appendLine("**Errore:** ${error?.message ?: "Unknown"}")
+            appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+            if (error != null) {
+                appendLine()
+                appendLine("### Stack Trace")
+                appendLine("```")
+                appendLine(error.stackTraceToString())
+                appendLine("```")
+            }
+            appendLine()
+            appendLine("---")
+            appendLine()
+            appendLine("_Issue creata automaticamente dal sistema di error handling._")
+        }
+        gitHubIssueReporter.reportError(title, body)
+    }
+
     fun ignoreSignal(signal: TradingSignal) {
         viewModelScope.launch {
             try {
                 orderExecutor.ignoreSignal(signal)
             } catch (e: Exception) {
                 _executionState.value = ExecutionState.Error(e.message ?: "Unknown error")
+                reportErrorToGitHub("Failed to ignore signal for ${signal.pair}", e)
             }
         }
     }
@@ -139,6 +165,7 @@ class SignalsViewModel @Inject constructor(
                 _executionState.value = ExecutionState.Error(
                     "Analysis failed: ${e.message ?: "Unknown error"}"
                 )
+                reportErrorToGitHub("Signal refresh analysis failed", e)
                 kotlinx.coroutines.delay(3000)
                 _executionState.value = ExecutionState.Idle
             }

@@ -33,6 +33,7 @@ class SettingsViewModelTest {
         every { android.util.Log.w(any<String>(), any<String>()) } returns 0
         every { android.util.Log.e(any<String>(), any<String>()) } returns 0
         every { android.util.Log.d(any<String>(), any<String>()) } returns 0
+        coEvery { gitHubIssueReporter.reportError(any(), any(), any()) } returns Result.success("1")
     }
 
     @After

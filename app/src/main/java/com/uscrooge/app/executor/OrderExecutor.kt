@@ -119,6 +119,16 @@ class OrderExecutor @Inject constructor(
 
         val volume = signal.suggestedAmount / currentPrice
 
+        if (!isAlpaca) {
+            val krakenSymbol = TradingPair.fromString(signal.pair).toKrakenSymbol()
+            val orderMinimum = krakenApiClient.getOrderMinimum(krakenSymbol)
+            if (orderMinimum > 0.0 && volume < orderMinimum) {
+                return Result.failure(Exception(
+                    "Buy volume $volume for ${signal.pair} is below minimum $orderMinimum"
+                ))
+            }
+        }
+
         val useLimit = config.useLimitOrders && signal.strength < config.strongSignalThreshold
         val orderType = if (useLimit) OrderType.LIMIT else OrderType.MARKET
         val limitPrice = if (useLimit) currentPrice * 0.999 else null
@@ -364,6 +374,14 @@ class OrderExecutor @Inject constructor(
         val currentPrice = tickerResult.getOrNull()!!.bid
         val volume = position.amount
 
+        if (!isAlpaca) {
+            val krakenSymbol = TradingPair.fromString(signal.pair).toKrakenSymbol()
+            val orderMinimum = krakenApiClient.getOrderMinimum(krakenSymbol)
+            if (orderMinimum > 0.0 && volume < orderMinimum) {
+                return closeDustPosition(position, "Sell signal (volume below minimum)")
+            }
+        }
+
         val validateResult = if (isAlpaca) {
             broker.placeOrder(
                 symbol = symbol,
@@ -525,6 +543,14 @@ class OrderExecutor @Inject constructor(
         val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
         val volume = position.amount
 
+        if (!isAlpaca) {
+            val krakenSymbol = TradingPair.fromString(position.pair).toKrakenSymbol()
+            val orderMinimum = krakenApiClient.getOrderMinimum(krakenSymbol)
+            if (orderMinimum > 0.0 && volume < orderMinimum) {
+                return closeDustPosition(position, "Exit condition: ${exitSignal.reason} (volume below minimum)")
+            }
+        }
+
         val orderResult = if (isAlpaca) {
             broker.placeOrder(
                 symbol = symbol,
@@ -613,6 +639,36 @@ class OrderExecutor @Inject constructor(
         return Result.success(order)
     }
 
+    private suspend fun closeDustPosition(position: Position, reason: String): Result<Order> {
+        Log.w(TAG, "Closing dust position ${position.pair}: volume ${position.amount} below minimum, reason: $reason")
+        val loss = -position.totalInvested
+        val closedPosition = position.copy(
+            currentValue = 0.0,
+            realizedPnL = loss,
+            isOpen = false,
+            closedAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis(),
+            exchangeStopOrderId = null,
+            exchangeTakeProfitOrderId = null
+        )
+        positionDao.updatePosition(closedPosition)
+        reportPositionFeedback(closedPosition, reason, config)
+        val dustOrder = Order(
+            orderId = "dust_${System.currentTimeMillis()}_${position.pair.hashCode()}",
+            pair = position.pair,
+            type = OrderType.MARKET,
+            side = OrderSide.SELL,
+            price = 0.0,
+            amount = 0.0,
+            cost = 0.0,
+            fee = 0.0,
+            status = OrderStatus.CANCELED,
+            createdAt = System.currentTimeMillis()
+        )
+        orderDao.insertOrder(dustOrder)
+        return Result.success(dustOrder)
+    }
+
     suspend fun closePosition(position: Position): Result<Order> {
         return try {
             val broker = getBrokerForPosition(position)
@@ -622,6 +678,14 @@ class OrderExecutor @Inject constructor(
 
             if (volume <= 0.0) {
                 return Result.failure(Exception("Position ${position.pair} has no volume to sell"))
+            }
+
+            if (!isAlpaca) {
+                val krakenSymbol = TradingPair.fromString(position.pair).toKrakenSymbol()
+                val orderMinimum = krakenApiClient.getOrderMinimum(krakenSymbol)
+                if (orderMinimum > 0.0 && volume < orderMinimum) {
+                    return closeDustPosition(position, "Manual close (volume below minimum)")
+                }
             }
 
             val orderResult = if (isAlpaca) {

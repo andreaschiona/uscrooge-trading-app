@@ -459,7 +459,7 @@ class KrakenApiClient(
         }
     }
 
-    private suspend fun getOrderMinimum(krakenSymbol: String): Double {
+    suspend fun getOrderMinimum(krakenSymbol: String): Double {
         cachedOrderMinimum[krakenSymbol]?.let { return it }
         return try {
             val response = getApiService().getAssetPairs(pair = krakenSymbol)

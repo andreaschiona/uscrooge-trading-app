@@ -5,6 +5,7 @@ import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.HealthCheckRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.executor.OrderExecutor
+import com.uscrooge.app.integration.GitHubIssueReporter
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,6 +24,7 @@ class DashboardViewModelTest {
     private val configRepository: ConfigRepository = mockk()
     private val healthCheckRepository: HealthCheckRepository = mockk()
     private val orderExecutor: OrderExecutor = mockk()
+    private val gitHubIssueReporter: GitHubIssueReporter = mockk()
 
     private lateinit var viewModel: DashboardViewModel
     private val testDispatcher = StandardTestDispatcher()
@@ -34,6 +36,7 @@ class DashboardViewModelTest {
         every { android.util.Log.w(any<String>(), any<String>()) } returns 0
         every { android.util.Log.e(any<String>(), any<String>()) } returns 0
         every { android.util.Log.d(any<String>(), any<String>()) } returns 0
+        coEvery { gitHubIssueReporter.reportError(any(), any(), any()) } returns Result.success("1")
     }
 
     @After
@@ -50,7 +53,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -63,7 +66,7 @@ class DashboardViewModelTest {
         coEvery { repository.syncOpenPositionsFromKraken(any()) } throws RuntimeException("Network error")
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -79,7 +82,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = createTestPortfolio()
@@ -95,7 +98,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = createTestPortfolio()
@@ -112,7 +115,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = createTestPortfolio()
@@ -128,7 +131,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = Portfolio(0.0, 0.0, 0.0, 0.0, emptyList(), 0.0, "Test")
@@ -144,7 +147,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = createTestPortfolio()
@@ -160,7 +163,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val position = createTestPosition()
@@ -177,7 +180,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns healthFlow
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         assertEquals(healthFlow.value, viewModel.systemHealth.value)
@@ -191,7 +194,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         viewModel.refreshData()
@@ -208,7 +211,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val position = createTestPosition()
@@ -229,7 +232,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val position = createTestPosition()
@@ -251,7 +254,7 @@ class DashboardViewModelTest {
         coEvery { repository.getPortfolio(any()) } returns createTestPortfolio()
         every { healthCheckRepository.systemHealth } returns MutableStateFlow(createTestSystemHealth())
 
-        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor)
+        viewModel = DashboardViewModel(repository, configRepository, healthCheckRepository, orderExecutor, gitHubIssueReporter)
         advanceUntilIdle()
 
         val portfolio = Portfolio(0.0, 1000.0, 0.0, 0.0, emptyList(), 1000.0, "Test")

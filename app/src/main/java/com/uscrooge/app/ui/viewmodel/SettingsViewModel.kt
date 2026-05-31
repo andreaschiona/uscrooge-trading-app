@@ -153,6 +153,21 @@ class SettingsViewModel @Inject constructor(
                 _saveState.value = SaveState.Idle
             } catch (e: Exception) {
                 _saveState.value = SaveState.Error(e.message ?: "Failed to save settings")
+                gitHubIssueReporter.reportError(
+                    title = "Settings save failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${e.message}")
+                        appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported")
+                )
             }
         }
     }
@@ -445,6 +460,22 @@ class SettingsViewModel @Inject constructor(
                 _downloadState.value = DownloadState.Success
             }.onFailure { error ->
                 _downloadState.value = DownloadState.Error(error.message ?: "Download failed")
+                gitHubIssueReporter.reportError(
+                    title = "Update download failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${error.message}")
+                        appendLine("**Download URL:** $downloadUrl")
+                        appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported", "update-check")
+                )
             }
         }
     }
@@ -469,6 +500,21 @@ class SettingsViewModel @Inject constructor(
                 _saveState.value = SaveState.Idle
             } catch (e: Exception) {
                 _saveState.value = SaveState.Error(e.message ?: "Failed to reset settings")
+                gitHubIssueReporter.reportError(
+                    title = "Settings reset to defaults failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${e.message}")
+                        appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported")
+                )
             }
         }
     }
@@ -483,6 +529,21 @@ class SettingsViewModel @Inject constructor(
                 _saveState.value = SaveState.Idle
             } catch (e: Exception) {
                 _saveState.value = SaveState.Error(e.message ?: "Failed to reset onboarding")
+                gitHubIssueReporter.reportError(
+                    title = "Onboarding reset failed",
+                    body = buildString {
+                        appendLine("## Contesto Errore")
+                        appendLine()
+                        appendLine("**Errore:** ${e.message}")
+                        appendLine("**Versione App:** ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        appendLine("**Timestamp:** ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())}")
+                        appendLine()
+                        appendLine("---")
+                        appendLine()
+                        appendLine("_Issue creata automaticamente dal sistema di error handling._")
+                    },
+                    labels = listOf("bug", "auto-reported")
+                )
             }
         }
     }

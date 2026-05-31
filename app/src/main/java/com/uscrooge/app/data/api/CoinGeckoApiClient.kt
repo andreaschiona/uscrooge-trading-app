@@ -1,6 +1,7 @@
 package com.uscrooge.app.data.api
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -10,7 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class CoinGeckoApiClient @Inject constructor() {
+open class CoinGeckoApiClient @Inject constructor() {
 
     companion object {
         private const val TAG = "CoinGeckoApi"
@@ -18,7 +19,10 @@ class CoinGeckoApiClient @Inject constructor() {
         private const val MAX_OHLC_RETRIES = 2
     }
 
-    private val service: CoinGeckoApiService by lazy {
+    @VisibleForTesting
+    internal open val service: CoinGeckoApiService = createService()
+
+    private fun createService(): CoinGeckoApiService {
         val logging = HttpLoggingInterceptor().apply {
             level = if (Log.isLoggable(TAG, Log.DEBUG))
                 HttpLoggingInterceptor.Level.BASIC
@@ -31,7 +35,7 @@ class CoinGeckoApiClient @Inject constructor() {
             .writeTimeout(15, TimeUnit.SECONDS)
             .addInterceptor(logging)
             .build()
-        Retrofit.Builder()
+        return Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())

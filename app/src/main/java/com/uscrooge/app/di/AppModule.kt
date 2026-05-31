@@ -3,6 +3,7 @@ package com.uscrooge.app.di
 import android.content.Context
 import com.google.gson.Gson
 import com.uscrooge.app.analysis.TechnicalAnalyzer
+import com.uscrooge.app.data.api.CoinGeckoApiClient
 import com.uscrooge.app.data.local.AuditLogDao
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
@@ -11,6 +12,7 @@ import com.uscrooge.app.data.local.TradingDatabase
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.integration.GitHubIssueReporter
+import com.uscrooge.app.strategy.PositionSelectionStrategy
 import com.uscrooge.app.update.UpdateChecker
 import dagger.Module
 import dagger.Provides
@@ -88,6 +90,16 @@ object AppModule {
     @Provides
     @Singleton
     fun provideUpdateChecker(): UpdateChecker = UpdateChecker()
+
+    @Provides
+    @Singleton
+    fun provideCoinGeckoApiClient(): CoinGeckoApiClient = CoinGeckoApiClient()
+
+    @Provides
+    @Singleton
+    fun providePositionSelectionStrategy(
+        coinGeckoApi: CoinGeckoApiClient
+    ): PositionSelectionStrategy = PositionSelectionStrategy(coinGeckoApi)
 }
 
 @Module

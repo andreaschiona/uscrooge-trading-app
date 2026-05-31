@@ -73,11 +73,13 @@ class PositionSelectionStrategy @Inject constructor(
             val liquidityScore = scoreLiquidity(marketCap, volume24h, volToCapRatio)
             val momentumScore = scoreMomentum(change1h, change24h, change7d)
             val volatilityScore = scoreVolatility(change1h, change24h, change7d)
+            val volumeScore = scoreVolume(volume24h, marketCap)
 
             val composite =
                 config.momentumWeight * momentumScore +
                 config.liquidityWeight * liquidityScore +
-                config.volatilityWeight * volatilityScore
+                config.volatilityWeight * volatilityScore +
+                config.volumeWeight * volumeScore
 
             AssetRanking(
                 coinId = coin.id,
@@ -147,6 +149,15 @@ class PositionSelectionStrategy @Inject constructor(
         val rawVol = h1Vol * 0.3 + d1Vol * 0.4 + d7Vol * 0.3
 
         return min(rawVol, 1.0)
+    }
+
+    private fun scoreVolume(
+        volume24h: Double,
+        marketCap: Double
+    ): Double {
+        val volScore = min(log10(max(volume24h, 1.0)) / 10.0, 1.0)
+        val ratioScore = if (marketCap > 0) min(volume24h / marketCap * 10.0, 1.0) else 0.0
+        return volScore * 0.6 + ratioScore * 0.4
     }
 
     suspend fun enrichWithAnalysis(

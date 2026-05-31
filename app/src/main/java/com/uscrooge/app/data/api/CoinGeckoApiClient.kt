@@ -2,6 +2,7 @@ package com.uscrooge.app.data.api
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import okhttp3.CertificatePinner
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -29,11 +30,16 @@ open class CoinGeckoApiClient @Inject constructor() {
             else
                 HttpLoggingInterceptor.Level.NONE
         }
+        val certificatePinner = CertificatePinner.Builder()
+            .add("api.coingecko.com", "sha256/BhM1gGE+L4fCC9ER5xj4P1/deHgoXOjL9TsSj7Q5B9o=")
+            .add("api.coingecko.com", "sha256/mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=")
+            .build()
         val client = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
             .addInterceptor(logging)
+            .certificatePinner(certificatePinner)
             .build()
         return Retrofit.Builder()
             .baseUrl(BASE_URL)

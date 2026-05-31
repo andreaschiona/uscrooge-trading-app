@@ -46,7 +46,7 @@ When `enablePositionSelection` is enabled in Settings, the crypto scanning list 
 
 **How it works:**
 
-```
+```text
 CoinGecko top 100 coins (by 24h volume)
   → filter: min market cap ($10M) + min volume ($1M)
   → multi-factor scoring (composite):
@@ -65,7 +65,7 @@ The scan runs every cycle alongside normal analysis. If CoinGecko is unreachable
 **Configuration** (via `TradingConfig` / Settings UI):
 
 | Parameter | Default | Description |
-|-----------|---------|-------------|
+| ----------- | --------- | ------------- |
 | enablePositionSelection | false | Enable automatic market scanning |
 | positionSelectionMinMarketCap | $10M | Minimum market cap filter |
 | positionSelectionMinVolume | $1M | Minimum 24h volume filter |
@@ -81,7 +81,7 @@ The scan runs every cycle alongside normal analysis. If CoinGecko is unreachable
 UScrooge uses a composite scoring system that combines multiple technical indicators:
 
 | Indicator | Weight | Signal |
-|-----------|--------|--------|
+| ----------- | -------- | -------- |
 | RSI (14) | 20% | Oversold <30 = buy, Overbought >70 = sell |
 | MACD (12/26/9) | 20% | Crossover detection and momentum direction |
 | Bollinger Bands (20, 2σ) | 10% | Price near lower band = buy, upper = sell |
@@ -106,7 +106,7 @@ UScrooge uses a composite scoring system that combines multiple technical indica
 
 ## Project Structure
 
-```
+```text
 app/src/main/java/com/uscrooge/app/
 ├── USCroogeApplication.kt          # Application entry point
 ├── MainActivity.kt                 # Compose UI entry
@@ -212,7 +212,7 @@ After installation, open the app and navigate to **Settings**:
 ### Key Parameters
 
 | Parameter | Default | Description |
-|-----------|---------|-------------|
+| ----------- | --------- | ------------- |
 | Automatic Trading | OFF | Enable autonomous execution |
 | Crypto Trading Pairs | BTC/EUR, ETH/EUR, SOL/EUR, XRP/EUR | Wishlist — always scanned, plus dynamic Kraken pairs fill remaining slots |
 | Stock Symbols | AAPL/USD, MSFT/USD, GOOGL/USD | Wishlist — always scanned, plus dynamic Alpaca assets fill remaining slots |

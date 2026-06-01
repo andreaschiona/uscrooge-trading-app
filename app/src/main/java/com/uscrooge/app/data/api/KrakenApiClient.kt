@@ -201,7 +201,6 @@ class KrakenApiClient(
                         wsname.endsWith("/$quoteCurrency")
                     }
                     ?.mapNotNull { info -> info.wsname }
-                    ?.sorted()
                     ?: emptyList()
 
                 cachedPairs = pairs

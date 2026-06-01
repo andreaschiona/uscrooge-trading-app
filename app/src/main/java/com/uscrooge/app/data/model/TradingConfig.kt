@@ -55,7 +55,7 @@ data class TradingConfig(
     val maxStockPairsToScan: Int = 20,           // Max stock pairs scanned (wishlist + dynamic)
 
     // Position selection strategy (CoinGecko-powered market scanning)
-    val enablePositionSelection: Boolean = false,     // Auto-scan market for best positions
+    val enablePositionSelection: Boolean = true,     // Auto-scan market for best positions
     val positionSelectionMinMarketCap: Double = 10_000_000.0,  // $10M min market cap
     val positionSelectionMinVolume: Double = 1_000_000.0,      // $1M min 24h volume
     val positionSelectionScanLimit: Int = 100,                 // Coins to scan

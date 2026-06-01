@@ -8,7 +8,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicLong
 
 class KrakenApiClient(
     apiKey: String = "",
@@ -55,25 +54,6 @@ class KrakenApiClient(
 
     companion object {
         private const val PAIRS_CACHE_MS = 60 * 60 * 1000L // 1 hour
-        // Kraken requires strictly-increasing nonces per API key. Unit is
-        // nanoseconds-since-epoch (System.currentTimeMillis() * 1_000_000) which
-        // is ~1000x the older "* 1000" microsecond formula. This change is
-        // intentional and IRREVERSIBLE per API key: once a large nonce has been
-        // accepted, reverting to a smaller unit will cause every subsequent
-        // request to fail with EAPI:Invalid nonce until the user issues a new
-        // API key (or a wider nonce window on Kraken's side).
-        private val globalNonce = AtomicLong(0L)
-
-        private fun nextNonce(): Long {
-            while (true) {
-                val now = System.currentTimeMillis() * 1_000_000L
-                val last = globalNonce.get()
-                val candidate = if (now > last) now else last + 1L
-                if (globalNonce.compareAndSet(last, candidate)) {
-                    return candidate
-                }
-            }
-        }
     }
 
     override fun updateCredentials(
@@ -367,7 +347,7 @@ class KrakenApiClient(
 
     suspend fun getKrakenAccountBalance(): Result<Map<String, Double>> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().getAccountBalance(nonce)
 
             if (response.isSuccessful && response.body() != null) {
@@ -394,7 +374,7 @@ class KrakenApiClient(
 
     suspend fun getTradeBalance(asset: String = "ZEUR"): Result<TradeBalance> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().getTradeBalance(nonce, asset)
 
             if (response.isSuccessful && response.body() != null) {
@@ -490,7 +470,7 @@ class KrakenApiClient(
         validate: Boolean = false
     ): Result<String> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val krakenPair = pair.toKrakenSymbol()
             val formattedPrice = price?.let {
                 val decimals = getPairDecimals(krakenPair)
@@ -538,7 +518,7 @@ class KrakenApiClient(
 
     suspend fun cancelKrakenOrder(orderId: String): Result<Boolean> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().cancelOrder(nonce, orderId)
 
             if (response.isSuccessful && response.body() != null) {
@@ -562,7 +542,7 @@ class KrakenApiClient(
 
     suspend fun getKrakenOpenPositions(): Result<Map<String, PositionInfo>> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().getOpenPositions(nonce)
 
             if (response.isSuccessful && response.body() != null) {
@@ -582,7 +562,7 @@ class KrakenApiClient(
 
     suspend fun getKrakenTradesHistory(start: Long? = null, end: Long? = null): Result<Map<String, TradeInfo>> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().getTradesHistory(nonce, start = start, end = end)
 
             if (response.isSuccessful && response.body() != null) {
@@ -602,7 +582,7 @@ class KrakenApiClient(
 
     suspend fun getKrakenOpenOrders(): Result<Map<String, OrderInfo>> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().getOpenOrders(nonce)
 
             if (response.isSuccessful && response.body() != null) {
@@ -622,7 +602,7 @@ class KrakenApiClient(
 
     suspend fun queryOrders(txids: List<String>): Result<Map<String, OrderInfo>> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().queryOrders(nonce, txids.joinToString(","))
 
             if (response.isSuccessful && response.body() != null) {
@@ -827,7 +807,7 @@ class KrakenApiClient(
 
     suspend fun queryOrder(txid: String): Result<OrderInfo?> {
         return try {
-            val nonce = nextNonce()
+            val nonce = 0L
             val response = getApiService().queryOrders(nonce, txid)
 
             if (response.isSuccessful && response.body() != null) {

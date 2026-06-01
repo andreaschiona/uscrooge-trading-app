@@ -15,7 +15,7 @@ jobs:
     if: |
       github.event.comment != null &&
       github.event.comment.author_association == 'OWNER' &&
-      github.actor == 'andreaschiona' &&
+      github.actor == github.repository_owner &&
       (
         contains(github.event.comment.body, ' /oc') ||
         startsWith(github.event.comment.body, '/oc') ||
@@ -39,15 +39,6 @@ jobs:
       - name: Install jq
         shell: bash
         run: sudo apt-get update -qq && sudo apt-get install -y -qq jq
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
 
       - name: Get opencode version
         id: version

@@ -25,8 +25,9 @@ data class TradingConfig(
     val macdSignalPeriod: Int = 9,
 
     // Risk management
-    val stopLossPercent: Double = 2.0,        // 2% stop loss
-    val takeProfitPercent: Double = 4.0,      // 4% take profit (2:1 ratio)
+    val stopLossPercent: Double = 3.0,        // 3% base stop loss (ATR-dynamic if volatilityAdjustment enabled)
+    val takeProfitPercent: Double = 6.0,      // 6% base take profit (2:1 ratio)
+    val stopLossATRMultiplier: Double = 1.5,  // ATR multiplier for dynamic stop loss
     val trailingStopPercent: Double = 1.5,    // Trailing stop
 
     // Execution
@@ -90,11 +91,11 @@ data class TradingConfig(
     val sentimentWeight: Double = 0.10,              // 10% weight in signal decision
 
     // Kelly Criterion
-    val useKellyCriterion: Boolean = false,
+    val useKellyCriterion: Boolean = true,
     val kellyFraction: Double = 0.5,                 // Fractional Kelly (half-Kelly default)
 
     // Volatility-based sizing
-    val volatilityAdjustment: Boolean = false,
+    val volatilityAdjustment: Boolean = true,
 
     // Correlation-based exposure limits
     val maxCorrelationExposure: Double = 0.4,        // Max 40% on correlated assets

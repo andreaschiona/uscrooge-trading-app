@@ -97,8 +97,8 @@ class TradingStrategyTest {
 
     @Test
     fun `evaluateExitConditions returns stop loss signal`() {
-        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 97.8)
-        val exitSignal = strategy.evaluateExitConditions(position, 97.8, config)
+        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 96.8)
+        val exitSignal = strategy.evaluateExitConditions(position, 96.8, config)
         assertNotNull(exitSignal)
         assertTrue(exitSignal!!.reason.contains("Stop loss"))
         assertEquals(ExitUrgency.IMMEDIATE, exitSignal.urgency)
@@ -106,8 +106,8 @@ class TradingStrategyTest {
 
     @Test
     fun `evaluateExitConditions returns take profit signal`() {
-        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 104.1)
-        val exitSignal = strategy.evaluateExitConditions(position, 104.1, config)
+        val position = createPosition(averageEntryPrice = 100.0, currentPrice = 106.5)
+        val exitSignal = strategy.evaluateExitConditions(position, 106.5, config)
         assertNotNull(exitSignal)
         assertTrue(exitSignal!!.reason.contains("Take profit"))
         assertEquals(ExitUrgency.NORMAL, exitSignal.urgency)

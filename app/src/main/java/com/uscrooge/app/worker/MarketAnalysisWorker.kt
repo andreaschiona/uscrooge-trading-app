@@ -147,7 +147,7 @@ class MarketAnalysisWorker @AssistedInject constructor(
                         break
                     }
 
-                    if (signal.strength >= config.strongSignalThreshold) {
+                    if (signal.strength >= config.minSignalStrength) {
                         try {
                             val result = orderExecutor.executeSignal(signal)
                             if (result.isSuccess && config.notifyOnExecution) {

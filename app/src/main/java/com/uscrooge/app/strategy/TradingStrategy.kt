@@ -83,15 +83,16 @@ class TradingStrategy @Inject constructor(
             }
         }
 
-        val (entryPrice, stopLoss, takeProfit) = calculatePriceTargets(
-            currentPrice = currentPrice,
-            signalType = signalType,
-            analysis = analysis
-        )
-
         val atr = if (config.volatilityAdjustment) {
             analyzer.calculateATR(ohlcData, ATR_PERIOD)
         } else null
+
+        val (entryPrice, stopLoss, takeProfit) = calculatePriceTargets(
+            currentPrice = currentPrice,
+            signalType = signalType,
+            analysis = analysis,
+            atr = atr
+        )
 
         val winRate = if (config.useKellyCriterion) {
             val wins = tradeJournalDao.getWinCountByPair(pair)
@@ -284,14 +285,27 @@ class TradingStrategy @Inject constructor(
         if (higherTimeframeTrends.isEmpty()) return Pair(buyScore, sellScore)
         var adjustedBuy = buyScore
         var adjustedSell = sellScore
+        var hasStrongOpposingTrend = false
         for (htfTrend in higherTimeframeTrends) {
             when (htfTrend) {
-                Trend.STRONG_DOWNTREND -> adjustedBuy -= 1.0
-                Trend.DOWNTREND -> adjustedBuy -= 0.5
-                Trend.STRONG_UPTREND -> adjustedSell -= 1.0
-                Trend.UPTREND -> adjustedSell -= 0.5
+                Trend.STRONG_DOWNTREND -> {
+                    adjustedBuy -= 2.0
+                    hasStrongOpposingTrend = true
+                }
+                Trend.DOWNTREND -> adjustedBuy -= 1.0
+                Trend.STRONG_UPTREND -> {
+                    adjustedSell -= 2.0
+                    hasStrongOpposingTrend = true
+                }
+                Trend.UPTREND -> adjustedSell -= 1.0
                 Trend.SIDEWAYS -> {}
             }
+        }
+        // Require HTF alignment: if a strong opposing trend exists, heavily suppress
+        // the conflicting signal by reducing the dominant score further.
+        if (hasStrongOpposingTrend) {
+            if (adjustedBuy > adjustedSell) adjustedBuy -= 1.0
+            else if (adjustedSell > adjustedBuy) adjustedSell -= 1.0
         }
         return Pair(maxOf(adjustedBuy, 0.0), maxOf(adjustedSell, 0.0))
     }
@@ -304,12 +318,22 @@ class TradingStrategy @Inject constructor(
     private fun calculatePriceTargets(
         currentPrice: Double,
         signalType: SignalType,
-        analysis: TechnicalAnalysis
+        analysis: TechnicalAnalysis,
+        atr: Double? = null
     ): Triple<Double, Double, Double> {
+        // Compute ATR-based dynamic SL/TP percentages when volatility data is available
+        val slPercent = if (atr != null && currentPrice > 0) {
+            val atrRatioPct = (atr / currentPrice) * 100.0
+            maxOf(config.stopLossPercent, atrRatioPct * config.stopLossATRMultiplier)
+        } else {
+            config.stopLossPercent
+        }
+        val tpPercent = config.takeProfitPercent * (slPercent / config.stopLossPercent)
+
         return when (signalType) {
             SignalType.BUY -> {
                 // Use support as additional stop loss consideration
-                val calculatedStopLoss = currentPrice * (1 - config.stopLossPercent / 100)
+                val calculatedStopLoss = currentPrice * (1 - slPercent / 100)
                 val stopLoss = analysis.support?.let { support ->
                     if (support < calculatedStopLoss && support > calculatedStopLoss * 0.95) {
                         support * 0.99  // Place stop just below support
@@ -317,7 +341,7 @@ class TradingStrategy @Inject constructor(
                 } ?: calculatedStopLoss
 
                 // Use resistance as take profit target
-                val calculatedTakeProfit = currentPrice * (1 + config.takeProfitPercent / 100)
+                val calculatedTakeProfit = currentPrice * (1 + tpPercent / 100)
                 val takeProfit = analysis.resistance?.let { resistance ->
                     if (resistance > currentPrice && resistance < calculatedTakeProfit) {
                         resistance * 0.99  // Take profit just before resistance
@@ -329,8 +353,8 @@ class TradingStrategy @Inject constructor(
 
             SignalType.SELL -> {
                 // For sell signals (closing position)
-                val stopLoss = currentPrice * (1 + config.stopLossPercent / 100)
-                val takeProfit = currentPrice * (1 - config.takeProfitPercent / 100)
+                val stopLoss = currentPrice * (1 + slPercent / 100)
+                val takeProfit = currentPrice * (1 - tpPercent / 100)
 
                 Triple(currentPrice, stopLoss, takeProfit)
             }

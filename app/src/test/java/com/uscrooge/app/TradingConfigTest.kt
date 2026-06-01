@@ -43,9 +43,9 @@ class TradingConfigTest {
     }
 
     @Test
-    fun `position selection is disabled by default`() {
+    fun `position selection is enabled by default`() {
         val config = TradingConfig()
-        assertFalse("Position selection should be disabled by default", config.enablePositionSelection)
+        assertTrue("Position selection should be enabled by default", config.enablePositionSelection)
     }
 
     @Test

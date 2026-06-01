@@ -281,7 +281,9 @@ class AlpacaApiClient(
                 val assets = response.body()!!
                     .filter { it.tradable && it.fractionable && it.exchange in validExchanges }
                     .map { it.symbol }
-                    .sorted()
+                    .let { symbols ->
+                        (POPULAR_STOCKS.filter { it in symbols } + symbols.filter { it !in POPULAR_STOCKS }.sorted())
+                    }
 
                 cachedAssets = assets
                 cachedAssetsTime = now

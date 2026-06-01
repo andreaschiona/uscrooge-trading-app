@@ -117,7 +117,26 @@ class OrderExecutor @Inject constructor(
             return Result.failure(Exception("Slippage too high: ${String.format("%.2f", slippage)}%"))
         }
 
-        val volume = signal.suggestedAmount / currentPrice
+        val quoteCurrency = signal.pair.substringAfter("/").uppercase()
+        val balanceResult = broker.getAvailableBalance(quoteCurrency)
+        if (balanceResult.isFailure) {
+            return Result.failure(balanceResult.exceptionOrNull()!!)
+        }
+        val availableBalance = balanceResult.getOrNull()!!
+        val maxAffordableAmount = availableBalance * 0.997
+        val effectiveAmount = if (signal.suggestedAmount > maxAffordableAmount) {
+            if (maxAffordableAmount <= 0.0) {
+                return Result.failure(Exception(
+                    "Insufficient $quoteCurrency balance (available: ${String.format("%.2f", availableBalance)}) to execute order for ${signal.pair}"
+                ))
+            }
+            Log.w(TAG, "Signal amount ${String.format("%.2f", signal.suggestedAmount)} exceeds available balance ${String.format("%.2f", availableBalance)} for ${signal.pair}. Reducing to ${String.format("%.2f", maxAffordableAmount)}")
+            maxAffordableAmount
+        } else {
+            signal.suggestedAmount
+        }
+
+        val volume = effectiveAmount / currentPrice
 
         if (!isAlpaca) {
             val krakenSymbol = TradingPair.fromString(signal.pair).toKrakenSymbol()
@@ -192,11 +211,11 @@ class OrderExecutor @Inject constructor(
             if (fillInfo.status == OrderStatus.CLOSED) {
                 Quadruple(fillInfo.executedPrice, fillInfo.executedVolume, fillInfo.fee, fillInfo.status)
             } else {
-                Quadruple(limitPrice ?: currentPrice, volume, signal.suggestedAmount * 0.0026, OrderStatus.OPEN)
+                Quadruple(limitPrice ?: currentPrice, volume, effectiveAmount * 0.0026, OrderStatus.OPEN)
             }
         } else {
             Log.w(TAG, "Using fallback price for order $orderId: ${fillResult.exceptionOrNull()?.message}")
-            Quadruple(limitPrice ?: currentPrice, volume, signal.suggestedAmount * 0.0026, OrderStatus.OPEN)
+            Quadruple(limitPrice ?: currentPrice, volume, effectiveAmount * 0.0026, OrderStatus.OPEN)
         }
 
         val order = Order(
@@ -221,7 +240,7 @@ class OrderExecutor @Inject constructor(
 
         if (existingPosition != null) {
             val newAmount = existingPosition.amount + volume
-            val newTotalInvested = existingPosition.totalInvested + signal.suggestedAmount
+            val newTotalInvested = existingPosition.totalInvested + effectiveAmount
             val newAveragePrice = newTotalInvested / newAmount
 
             val updatedPosition = existingPosition.copy(
@@ -245,7 +264,7 @@ class OrderExecutor @Inject constructor(
                 averageEntryPrice = executionPrice,
                 currentPrice = executionPrice,
                 peakPrice = executionPrice,
-                totalInvested = signal.suggestedAmount,
+                totalInvested = effectiveAmount,
                 currentValue = volume * executionPrice,
                 unrealizedPnL = 0.0,
                 unrealizedPnLPercent = 0.0,

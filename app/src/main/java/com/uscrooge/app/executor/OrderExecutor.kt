@@ -639,8 +639,17 @@ class OrderExecutor @Inject constructor(
         return Result.success(order)
     }
 
-    private suspend fun closeDustPosition(position: Position, reason: String): Result<Order> {
+    private suspend fun closeDustPosition(position: Position, reason: String, broker: BrokerApi? = null): Result<Order> {
         Log.w(TAG, "Closing dust position ${position.pair}: volume ${position.amount} below minimum, reason: $reason")
+
+        val activeBroker = broker ?: getBrokerForPosition(position)
+        position.exchangeStopOrderId?.let { id ->
+            try { activeBroker.cancelOrder(id) } catch (_: Exception) {}
+        }
+        position.exchangeTakeProfitOrderId?.let { id ->
+            try { activeBroker.cancelOrder(id) } catch (_: Exception) {}
+        }
+
         val loss = -position.totalInvested
         val closedPosition = position.copy(
             currentValue = 0.0,

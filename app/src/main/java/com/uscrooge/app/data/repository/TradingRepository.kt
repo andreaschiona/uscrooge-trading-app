@@ -738,6 +738,11 @@ class TradingRepository @Inject constructor(
 
                 for ((base, amount) in heldAssets) {
                     val pairSymbol = "$base/EUR"
+                    val orderMinimum = krakenApiClient.getOrderMinimum("${base}EUR")
+                    if (orderMinimum > 0.0 && amount < orderMinimum) {
+                        Log.d(TAG, "syncOpenPositions: skipping $base balance $amount below minimum $orderMinimum")
+                        continue
+                    }
                     activeBases.add(base)
 
                     val buyTrades = buyTradesByBase[base]

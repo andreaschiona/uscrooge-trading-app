@@ -87,6 +87,7 @@ class OrderExecutor @Inject constructor(
                 circuitBreaker.recordSuccess()
             } else {
                 circuitBreaker.recordFailure()
+                signalDao.updateSignal(signal.copy(status = SignalStatus.FAILED))
             }
 
             result
@@ -114,7 +115,7 @@ class OrderExecutor @Inject constructor(
         val slippage = abs((currentPrice - signal.suggestedPrice) / signal.suggestedPrice) * 100
 
         if (slippage > config.maxSlippagePercent) {
-            return Result.failure(Exception("Slippage too high: ${String.format("%.2f", slippage)}%"))
+            Log.w(TAG, "Slippage ${String.format("%.2f", slippage)}% exceeds max ${config.maxSlippagePercent}% for ${signal.pair}. Forcing market order.")
         }
 
         val quoteCurrency = signal.pair.substringAfter("/").uppercase()
@@ -148,7 +149,7 @@ class OrderExecutor @Inject constructor(
             }
         }
 
-        val useLimit = config.useLimitOrders && signal.strength < config.strongSignalThreshold
+        val useLimit = config.useLimitOrders && signal.strength < config.strongSignalThreshold && slippage <= config.maxSlippagePercent
         val orderType = if (useLimit) OrderType.LIMIT else OrderType.MARKET
         val limitPrice = if (useLimit) currentPrice * 0.999 else null
 

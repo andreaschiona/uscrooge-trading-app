@@ -8,6 +8,7 @@ import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.api.retryWithBackoff
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.local.TradingSignalDao
 import com.uscrooge.app.data.model.*
 import com.uscrooge.app.di.BrokerRegistry
@@ -36,6 +37,7 @@ class OrderExecutor @Inject constructor(
     private val signalDao: TradingSignalDao,
     private val orderDao: OrderDao,
     private val positionDao: PositionDao,
+    private val tradeJournalDao: TradeJournalDao,
     private val circuitBreaker: CircuitBreaker,
     private val gitHubIssueReporter: GitHubIssueReporter
 ) {
@@ -509,6 +511,7 @@ class OrderExecutor @Inject constructor(
         positionDao.updatePosition(closedPosition)
 
         reportPositionFeedback(closedPosition, "Sell signal: ${signal.getReasonsList().joinToString(", ")}", config)
+        recordJournalEntry(closedPosition, "Sell signal: ${signal.getReasonsList().joinToString(", ")}", actualFee)
 
         signalDao.updateSignal(
             signal.copy(
@@ -657,6 +660,7 @@ class OrderExecutor @Inject constructor(
         positionDao.updatePosition(closedPosition)
 
         reportPositionFeedback(closedPosition, "Exit condition: ${exitSignal.reason}", config)
+        recordJournalEntry(closedPosition, exitSignal.reason, actualFee)
 
         Log.i(TAG, "Exit order executed for ${position.pair}: ${exitSignal.reason}, PnL: $realizedPnL")
 
@@ -686,6 +690,7 @@ class OrderExecutor @Inject constructor(
         )
         positionDao.updatePosition(closedPosition)
         reportPositionFeedback(closedPosition, reason, config)
+        recordJournalEntry(closedPosition, reason)
         val dustOrder = Order(
             orderId = "dust_${System.currentTimeMillis()}_${position.pair.hashCode()}",
             pair = position.pair,
@@ -799,6 +804,7 @@ class OrderExecutor @Inject constructor(
 
             positionDao.updatePosition(closedPosition)
             reportPositionFeedback(closedPosition, "Manual close by user", config)
+            recordJournalEntry(closedPosition, "Manual close by user", actualFee)
 
             Log.i(TAG, "Position closed manually: ${position.pair}, PnL: $realizedPnL")
 
@@ -935,6 +941,48 @@ class OrderExecutor @Inject constructor(
         val fee: Double,
         val fillTime: Long
     )
+
+    private suspend fun recordJournalEntry(
+        closedPosition: Position,
+        exitReason: String,
+        fee: Double = 0.0
+    ) {
+        try {
+            val buyOrder = orderDao.getLastBuyOrderByPair(closedPosition.pair)
+            val openingSignal = buyOrder?.signalId?.let { signalId ->
+                signalDao.getSignalById(signalId)
+            }
+
+            val exitTime = closedPosition.closedAt ?: System.currentTimeMillis()
+            val entryTime = closedPosition.openedAt
+            val duration = exitTime - entryTime
+            val profitLoss = closedPosition.realizedPnL ?: 0.0
+            val totalInvested = closedPosition.totalInvested
+            val profitLossPercent = if (totalInvested > 0) (profitLoss / totalInvested) * 100 else 0.0
+
+            val entry = TradeJournalEntry(
+                pair = closedPosition.pair,
+                side = OrderSide.BUY,
+                entryPrice = closedPosition.averageEntryPrice,
+                exitPrice = closedPosition.currentPrice,
+                amount = closedPosition.amount,
+                entryTime = entryTime,
+                exitTime = exitTime,
+                profitLoss = profitLoss,
+                profitLossPercent = profitLossPercent,
+                fee = fee,
+                exitReason = exitReason,
+                duration = duration,
+                signalStrength = openingSignal?.strength ?: 0.0,
+                signalReasons = openingSignal?.reasons ?: ""
+            )
+
+            tradeJournalDao.insertEntry(entry)
+            Log.i(TAG, "Journal entry recorded for ${closedPosition.pair}: $exitReason, PnL: ${String.format("%.2f", profitLoss)}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to record journal entry for ${closedPosition.pair}", e)
+        }
+    }
 
     private suspend fun reportPositionFeedback(
         closedPosition: Position,

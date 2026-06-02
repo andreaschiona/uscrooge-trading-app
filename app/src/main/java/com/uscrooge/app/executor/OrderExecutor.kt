@@ -164,6 +164,7 @@ class OrderExecutor @Inject constructor(
                 quantity = volume,
                 orderType = orderType,
                 limitPrice = limitPrice,
+                notional = effectiveAmount,
                 validate = true
             )
         } else {
@@ -188,6 +189,7 @@ class OrderExecutor @Inject constructor(
                 quantity = volume,
                 orderType = orderType,
                 limitPrice = limitPrice,
+                notional = effectiveAmount,
                 validate = false
             )
         } else {

@@ -47,6 +47,7 @@ class MockBrokerApi(
         limitPrice: Double?,
         stopPrice: Double?,
         takeProfitPrice: Double?,
+        notional: Double?,
         validate: Boolean
     ): Result<String> {
         lastPlaceOrderSymbol = symbol

@@ -722,6 +722,7 @@ class AlpacaApiClient(
         limitPrice: Double?,
         stopPrice: Double?,
         takeProfitPrice: Double?,
+        notional: Double?,
         validate: Boolean
     ): Result<String> {
         if (apiKey.isBlank() || apiSecret.isBlank()) {
@@ -739,7 +740,8 @@ class AlpacaApiClient(
 
             val orderRequest = AlpacaOrderRequest(
                 symbol = normalizedSymbol,
-                qty = quantity,
+                qty = if (notional != null) null else quantity,
+                notional = notional,
                 side = side.name.lowercase(),
                 type = alpacaOrderType,
                 time_in_force = "day",

@@ -87,13 +87,15 @@ class OrderExecutor @Inject constructor(
                 circuitBreaker.recordSuccess()
             } else {
                 circuitBreaker.recordFailure()
-                signalDao.updateSignal(signal.copy(status = SignalStatus.FAILED))
+                // Keep signal as PENDING so user can retry on transient errors
+                signalDao.updateSignal(signal.copy(status = SignalStatus.PENDING))
             }
 
             result
         } catch (e: Exception) {
             circuitBreaker.recordFailure()
-            signalDao.updateSignal(signal.copy(status = SignalStatus.FAILED))
+            // Keep signal as PENDING so user can retry on transient errors
+            signalDao.updateSignal(signal.copy(status = SignalStatus.PENDING))
             Result.failure(e)
         }
     }

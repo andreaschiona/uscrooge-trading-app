@@ -30,7 +30,10 @@ data class TradingSignal(
     val status: SignalStatus,
     val executedAt: Long? = null,
     val executedPrice: Double? = null,
-    val orderId: String? = null
+    val orderId: String? = null,
+    val assetName: String = "",
+    val assetDescription: String = "",
+    val assetType: String = "CRYPTO" // "CRYPTO" or "STOCK"
 ) {
     fun getReasonsList(): List<String> {
         return try {
@@ -49,6 +52,7 @@ enum class SignalType {
 
 enum class SignalStatus {
     PENDING,        // Waiting for user action
+    AUTO_OPEN,      // Opened automatically by auto-trading
     EXECUTING,      // Order being placed
     EXECUTED,       // Order successfully executed
     IGNORED,        // User ignored the signal

@@ -68,7 +68,7 @@ class OrderExecutor @Inject constructor(
     }
 
     suspend fun executeSignal(signal: TradingSignal, bypassCircuitBreaker: Boolean = false): Result<Order> {
-        val blocked = circuitBreaker.checkTradingAllowed(config, skipDrawdownCheck = bypassCircuitBreaker)
+        val blocked = if (bypassCircuitBreaker) null else circuitBreaker.checkTradingAllowed(config)
         if (blocked != null) {
             signalDao.updateSignal(signal.copy(status = SignalStatus.FAILED))
             return Result.failure(Exception("Trading blocked: $blocked"))

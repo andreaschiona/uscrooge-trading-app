@@ -51,6 +51,61 @@ class TradingRepository @Inject constructor(
         private val EUR_ASSETS = setOf("ZEUR", "EUR", "XEUR")
         private const val PREFS_NAME = "analysis_log_prefs"
         private const val KEY_LAST_LOG = "last_analysis_log"
+
+        private val CRYPTO_NAMES = mapOf(
+            "BTC" to "Bitcoin",
+            "ETH" to "Ethereum",
+            "SOL" to "Solana",
+            "XRP" to "Ripple",
+            "ADA" to "Cardano",
+            "DOT" to "Polkadot",
+            "LINK" to "Chainlink",
+            "AVAX" to "Avalanche",
+            "ATOM" to "Cosmos",
+            "UNI" to "Uniswap",
+            "LTC" to "Litecoin",
+            "MATIC" to "Polygon",
+            "DOGE" to "Dogecoin",
+            "SHIB" to "Shiba Inu",
+            "TRX" to "TRON",
+            "XLM" to "Stellar",
+            "VET" to "VeChain",
+            "FIL" to "Filecoin",
+            "ALGO" to "Algorand",
+            "NEAR" to "NEAR Protocol",
+            "APT" to "Aptos",
+            "ARB" to "Arbitrum",
+            "OP" to "Optimism",
+            "SUI" to "Sui",
+            "PEPE" to "Pepe",
+            "INJ" to "Injective",
+            "RUNE" to "THORChain",
+            "FTM" to "Fantom",
+            "CRV" to "Curve DAO",
+            "AAVE" to "Aave",
+            "MKR" to "Maker",
+            "COMP" to "Compound",
+            "SUSHI" to "SushiSwap",
+            "CAKE" to "PancakeSwap",
+            "AXS" to "Axie Infinity",
+            "SAND" to "The Sandbox",
+            "MANA" to "Decentraland",
+            "GALA" to "Gala",
+            "CHZ" to "Chiliz",
+            "ENJ" to "Enjin Coin"
+        )
+
+        private fun getAssetName(pair: String): String {
+            val base = pair.substringBefore("/").uppercase()
+            return CRYPTO_NAMES[base] ?: base
+        }
+
+        private fun getAssetDescription(pair: String): String {
+            val base = pair.substringBefore("/").uppercase()
+            val quote = pair.substringAfter("/").uppercase()
+            return CRYPTO_NAMES[base]?.let { "$it ($base) - $quote trading pair" }
+                ?: "$base - $quote trading pair"
+        }
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -341,6 +396,11 @@ class TradingRepository @Inject constructor(
             )
 
             signalResult.signal?.let { newSignal ->
+                val isCrypto = isCryptoPair(pair)
+                val assetType = if (isCrypto) "CRYPTO" else "STOCK"
+                val assetName = getAssetName(pair)
+                val assetDescription = getAssetDescription(pair)
+
                 val existingPending = getPendingSignalByPair(pair)
                 if (existingPending != null) {
                     updateSignal(
@@ -354,11 +414,20 @@ class TradingRepository @Inject constructor(
                             suggestedAmount = newSignal.suggestedAmount,
                             riskRewardRatio = newSignal.riskRewardRatio,
                             timestamp = System.currentTimeMillis(),
-                            reasons = newSignal.reasons
+                            reasons = newSignal.reasons,
+                            assetName = assetName,
+                            assetDescription = assetDescription,
+                            assetType = assetType
                         )
                     )
                 } else {
-                    insertSignal(newSignal)
+                    insertSignal(
+                        newSignal.copy(
+                            assetName = assetName,
+                            assetDescription = assetDescription,
+                            assetType = assetType
+                        )
+                    )
                 }
             }
 

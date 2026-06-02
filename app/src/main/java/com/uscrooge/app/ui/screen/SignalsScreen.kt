@@ -177,8 +177,12 @@ fun SignalsContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val pendingSignals = signals.filter { it.status == SignalStatus.PENDING }
-        val otherSignals = signals.filter { it.status != SignalStatus.PENDING }
+        val pendingSignals = signals.filter {
+            it.status == SignalStatus.PENDING || it.status == SignalStatus.AUTO_OPEN
+        }
+        val otherSignals = signals.filter {
+            it.status != SignalStatus.PENDING && it.status != SignalStatus.AUTO_OPEN
+        }
 
         if (signals.isEmpty()) {
             Card(
@@ -264,6 +268,7 @@ fun SignalCard(
         colors = CardDefaults.cardColors(
             containerColor = when (signal.status) {
                 SignalStatus.PENDING -> MaterialTheme.colorScheme.surface
+                SignalStatus.AUTO_OPEN -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
                 SignalStatus.EXECUTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                 SignalStatus.IGNORED -> MaterialTheme.colorScheme.surfaceVariant
                 SignalStatus.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -304,16 +309,34 @@ fun SignalCard(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Column {
-                        Text(
-                            text = signal.pair,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = signal.pair,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            BrokerBadge(signal.assetType)
+                        }
                         Text(
                             text = signal.type.name,
                             style = MaterialTheme.typography.bodySmall,
                             color = iconColor
                         )
+                        if (signal.assetName.isNotBlank()) {
+                            Text(
+                                text = signal.assetName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (signal.assetDescription.isNotBlank()) {
+                            Text(
+                                text = signal.assetDescription,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
 
@@ -381,8 +404,8 @@ fun SignalCard(
                 StatusBadge(signal.status)
             }
 
-            // Action buttons for pending signals
-            if (signal.status == SignalStatus.PENDING && onExecute != null && onIgnore != null) {
+            // Action buttons for pending/auto-open signals
+            if ((signal.status == SignalStatus.PENDING || signal.status == SignalStatus.AUTO_OPEN) && onExecute != null && onIgnore != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -452,6 +475,7 @@ fun SignalStrengthBadge(strength: Double) {
 fun StatusBadge(status: SignalStatus) {
     val (text, color) = when (status) {
         SignalStatus.PENDING -> "Pending" to Color(0xFFFF9800)
+        SignalStatus.AUTO_OPEN -> "Auto Open" to Color(0xFF2196F3)
         SignalStatus.EXECUTING -> "Executing" to Color(0xFF2196F3)
         SignalStatus.EXECUTED -> "Executed" to Color(0xFF4CAF50)
         SignalStatus.IGNORED -> "Ignored" to Color.Gray

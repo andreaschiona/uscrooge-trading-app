@@ -511,6 +511,8 @@ fun PositionCard(
 fun BrokerBadge(broker: String?) {
     if (broker == null) return
     val (label, color) = when (broker) {
+        "STOCK" -> "STOCK" to Color(0xFF2196F3)
+        "CRYPTO" -> "CRYPTO" to Color(0xFFFF9800)
         "Alpaca" -> "STOCK" to Color(0xFF2196F3)
         "Kraken" -> "CRYPTO" to Color(0xFFFF9800)
         else -> return

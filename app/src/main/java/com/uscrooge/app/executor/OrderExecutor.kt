@@ -141,6 +141,12 @@ class OrderExecutor @Inject constructor(
             signal.suggestedAmount
         }
 
+        if (effectiveAmount <= 0.0) {
+            return Result.failure(Exception(
+                "Invalid buy amount ${String.format("%.4f", effectiveAmount)} for ${signal.pair}. Signal suggested: ${String.format("%.4f", signal.suggestedAmount)}, available: ${String.format("%.4f", availableBalance)}"
+            ))
+        }
+
         val volume = effectiveAmount / currentPrice
 
         if (!isAlpaca) {

@@ -731,6 +731,13 @@ class AlpacaApiClient(
         return try {
             val normalizedSymbol = normalizeSymbol(symbol)
 
+            if (notional != null && notional <= 0.0) {
+                return Result.failure(Exception("Invalid notional value $notional for $symbol. Notional must be a positive amount."))
+            }
+            if (notional == null && quantity <= 0.0) {
+                return Result.failure(Exception("Invalid quantity $quantity for $symbol. Quantity must be a positive number of shares."))
+            }
+
             val alpacaOrderType = when (orderType) {
                 OrderType.MARKET -> "market"
                 OrderType.LIMIT -> "limit"

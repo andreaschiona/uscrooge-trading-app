@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.uscrooge.app.BuildConfig
+import kotlin.math.cos
+import kotlin.math.sin
 import com.uscrooge.app.data.model.Portfolio
 import com.uscrooge.app.data.model.Position
 import com.uscrooge.app.data.model.SystemHealth
@@ -110,22 +112,28 @@ class DashboardViewModel @Inject constructor(
     fun generateEquityCurve(portfolio: Portfolio): List<Pair<Float, Float>> {
         val positions = portfolio.positions
         if (positions.isEmpty()) {
-            return listOf(0f to portfolio.currentValue.toFloat())
+            val nowHours = System.currentTimeMillis() / 3600000f
+            return listOf(
+                (nowHours - 24f) to portfolio.availableBalance.toFloat(),
+                nowHours to portfolio.currentValue.toFloat()
+            )
         }
 
         val sorted = positions.sortedBy { it.openedAt }
         val points = mutableListOf<Pair<Float, Float>>()
-        var cumulativeInvested = 0.0
-        var cumulativeValue = portfolio.availableBalance
+        val nowMs = System.currentTimeMillis()
+        val nowHours = nowMs / 3600000f
 
-        points.add(0f to cumulativeValue.toFloat())
+        val startMs = sorted.first().openedAt - 86400000L
+        points.add((startMs / 3600000f) to portfolio.availableBalance.toFloat())
 
-        sorted.forEachIndexed { index, pos ->
-            cumulativeInvested += pos.totalInvested
-            cumulativeValue += pos.currentValue
-            val timeIndex = kotlin.math.round((index + 1).toFloat() / sorted.size.toFloat() * 100f * 10000f) / 10000f
-            points.add(timeIndex to cumulativeValue.toFloat())
+        var runningValue = portfolio.availableBalance
+        sorted.forEach { pos ->
+            runningValue += pos.totalInvested
+            points.add((pos.openedAt / 3600000f) to runningValue.toFloat())
         }
+
+        points.add(nowHours to portfolio.currentValue.toFloat())
 
         return points
     }
@@ -175,8 +183,14 @@ class DashboardViewModel @Inject constructor(
         val days = 30
         val basePrice = if (position.averageEntryPrice > 0.0) position.averageEntryPrice else position.currentPrice
         return (0 until days).map { i ->
-            val variation = (Math.sin(i * 0.3) * 0.02 + (position.currentPrice - basePrice) / basePrice * (i.toFloat() / days))
-            (basePrice * (1 + variation)).toFloat()
+            val progress = i.toFloat() / days
+            val drift = (position.currentPrice - basePrice) * progress
+            val noise = (
+                sin(i * 0.5) * 0.01 +
+                sin(i * 0.13) * 0.005 +
+                cos(i * 0.07) * 0.008
+            ) * basePrice
+            (basePrice + drift + noise).toFloat()
         }
     }
 }

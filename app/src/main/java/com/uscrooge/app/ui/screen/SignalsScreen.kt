@@ -652,25 +652,28 @@ fun CompactSignalCard(signal: TradingSignal) {
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = formatTimestamp(signal.timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(22.dp)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    StatusBadge(signal.status)
-                    IconButton(
-                        onClick = { expanded = !expanded },
-                        modifier = Modifier.size(22.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (expanded) "Collapse" else "Expand",
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatTimestamp(signal.timestamp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                StatusBadge(signal.status)
             }
 
             if (expanded) {

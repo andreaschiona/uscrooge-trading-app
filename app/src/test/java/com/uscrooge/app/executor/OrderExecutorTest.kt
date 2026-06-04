@@ -1,6 +1,7 @@
 package com.uscrooge.app.executor
 
 import com.uscrooge.app.TestDataFactory
+import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.KrakenApiClient
 import com.uscrooge.app.data.local.OrderDao
@@ -27,6 +28,7 @@ class OrderExecutorTest {
     private val circuitBreaker: CircuitBreaker = mockk()
     private val gitHubIssueReporter: GitHubIssueReporter = mockk()
     private val tradeJournalDao: TradeJournalDao = mockk()
+    private val technicalAnalyzer: TechnicalAnalyzer = mockk()
 
     private lateinit var executor: OrderExecutor
 
@@ -41,7 +43,8 @@ class OrderExecutorTest {
             positionDao = positionDao,
             circuitBreaker = circuitBreaker,
             tradeJournalDao = tradeJournalDao,
-            gitHubIssueReporter = gitHubIssueReporter
+            gitHubIssueReporter = gitHubIssueReporter,
+            technicalAnalyzer = technicalAnalyzer
         )
         executor.updateConfig(TradingConfig())
     }

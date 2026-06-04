@@ -201,7 +201,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // WorkManager for background tasks
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // Hilt - Dependency Injection
     implementation("com.google.dagger:hilt-android:2.59.2")

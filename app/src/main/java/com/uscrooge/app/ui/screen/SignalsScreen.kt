@@ -177,8 +177,12 @@ fun SignalsContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val pendingSignals = signals.filter { it.status == SignalStatus.PENDING }
-        val otherSignals = signals.filter { it.status != SignalStatus.PENDING }
+        val pendingSignals = signals.filter {
+            it.status == SignalStatus.PENDING || it.status == SignalStatus.AUTO_OPEN
+        }
+        val otherSignals = signals.filter {
+            it.status != SignalStatus.PENDING && it.status != SignalStatus.AUTO_OPEN
+        }
 
         if (signals.isEmpty()) {
             Card(
@@ -238,12 +242,7 @@ fun SignalsContent(
                     }
 
                     items(otherSignals) { signal ->
-                        SignalCard(
-                            signal = signal,
-                            isExecuting = false,
-                            onExecute = null,
-                            onIgnore = null
-                        )
+                        CompactSignalCard(signal = signal)
                     }
                 }
             }
@@ -258,12 +257,15 @@ fun SignalCard(
     onExecute: (() -> Unit)?,
     onIgnore: (() -> Unit)?
 ) {
+    var advancedExpanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         colors = CardDefaults.cardColors(
             containerColor = when (signal.status) {
                 SignalStatus.PENDING -> MaterialTheme.colorScheme.surface
+                SignalStatus.AUTO_OPEN -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
                 SignalStatus.EXECUTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
                 SignalStatus.IGNORED -> MaterialTheme.colorScheme.surfaceVariant
                 SignalStatus.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
@@ -304,16 +306,34 @@ fun SignalCard(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Column {
-                        Text(
-                            text = signal.pair,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = signal.pair,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            BrokerBadge(signal.assetType)
+                        }
                         Text(
                             text = signal.type.name,
                             style = MaterialTheme.typography.bodySmall,
                             color = iconColor
                         )
+                        if (signal.assetName.isNotBlank()) {
+                            Text(
+                                text = signal.assetName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (signal.assetDescription.isNotBlank()) {
+                            Text(
+                                text = signal.assetDescription,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
 
@@ -322,46 +342,83 @@ fun SignalCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            Divider()
+            // Non-technical summary
+            SignalSummary(signal)
 
             Spacer(modifier = Modifier.height(12.dp))
+            Divider()
 
-            // Price information
+            // Advanced toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                InfoItem("Current Price", "€${String.format("%.2f", signal.currentPrice)}")
-                InfoItem("Suggested", "€${String.format("%.2f", signal.suggestedPrice)}")
-                InfoItem("Amount", "€${String.format("%.2f", signal.suggestedAmount)}")
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                InfoItem("Stop Loss", "€${String.format("%.2f", signal.stopLoss)}")
-                InfoItem("Take Profit", "€${String.format("%.2f", signal.takeProfit)}")
-                InfoItem("R/R Ratio", String.format("%.2f", signal.riskRewardRatio))
-            }
-
-            // Reasons
-            if (signal.getReasonsList().isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Reasons:",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
+                    text = "Advanced",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                signal.getReasonsList().take(3).forEach { reason ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "• $reason",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (advancedExpanded) "Hide details" else "Show details",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
+                    IconButton(
+                        onClick = { advancedExpanded = !advancedExpanded },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (advancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (advancedExpanded) "Hide advanced" else "Show advanced",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            if (advancedExpanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Price information
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    InfoItem("Current Price", "€${String.format("%.2f", signal.currentPrice)}")
+                    InfoItem("Suggested", "€${String.format("%.2f", signal.suggestedPrice)}")
+                    InfoItem("Amount", "€${String.format("%.2f", signal.suggestedAmount)}")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    InfoItem("Stop Loss", "€${String.format("%.2f", signal.stopLoss)}")
+                    InfoItem("Take Profit", "€${String.format("%.2f", signal.takeProfit)}")
+                    InfoItem("R/R Ratio", String.format("%.2f", signal.riskRewardRatio))
+                }
+
+                // Reasons
+                if (signal.getReasonsList().isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Reasons:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    signal.getReasonsList().forEach { reason ->
+                        Text(
+                            text = "• $reason",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -381,8 +438,8 @@ fun SignalCard(
                 StatusBadge(signal.status)
             }
 
-            // Action buttons for pending signals
-            if (signal.status == SignalStatus.PENDING && onExecute != null && onIgnore != null) {
+            // Action buttons for pending/auto-open signals
+            if ((signal.status == SignalStatus.PENDING || signal.status == SignalStatus.AUTO_OPEN) && onExecute != null && onIgnore != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -452,6 +509,7 @@ fun SignalStrengthBadge(strength: Double) {
 fun StatusBadge(status: SignalStatus) {
     val (text, color) = when (status) {
         SignalStatus.PENDING -> "Pending" to Color(0xFFFF9800)
+        SignalStatus.AUTO_OPEN -> "Auto Open" to Color(0xFF2196F3)
         SignalStatus.EXECUTING -> "Executing" to Color(0xFF2196F3)
         SignalStatus.EXECUTED -> "Executed" to Color(0xFF4CAF50)
         SignalStatus.IGNORED -> "Ignored" to Color.Gray
@@ -471,6 +529,201 @@ fun StatusBadge(status: SignalStatus) {
             fontWeight = FontWeight.Bold,
             color = color
         )
+    }
+}
+
+@Composable
+fun SignalSummary(signal: TradingSignal) {
+    val direction = when (signal.type) {
+        SignalType.BUY -> "Buy"
+        SignalType.SELL -> "Sell"
+        SignalType.HOLD -> "Hold"
+    }
+    val priceChange = ((signal.takeProfit - signal.suggestedPrice) / signal.suggestedPrice * 100)
+    val stopChange = ((signal.stopLoss - signal.suggestedPrice) / signal.suggestedPrice * 100)
+
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Text(
+                text = "$direction ${signal.pair} at €${String.format("%.2f", signal.suggestedPrice)}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = buildString {
+                    append("Target: €${String.format("%.2f", signal.takeProfit)}")
+                    append(" (${if (priceChange >= 0) "+" else ""}${String.format("%.1f", priceChange)}%)")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF4CAF50)
+            )
+            Text(
+                text = buildString {
+                    append("Stop: €${String.format("%.2f", signal.stopLoss)}")
+                    append(" (${if (stopChange >= 0) "+" else ""}${String.format("%.1f", stopChange)}%)")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFE57373)
+            )
+            if (signal.getReasonsList().isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = signal.getReasonsList().first(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = "Risk/Reward: ${String.format("%.1f", signal.riskRewardRatio)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun CompactSignalCard(signal: TradingSignal) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when (signal.status) {
+                SignalStatus.EXECUTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                SignalStatus.IGNORED -> MaterialTheme.colorScheme.surfaceVariant
+                SignalStatus.FAILED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = when (signal.type) {
+                        SignalType.BUY -> Icons.Default.TrendingUp
+                        SignalType.SELL -> Icons.Default.TrendingDown
+                        SignalType.HOLD -> Icons.Default.Remove
+                    }
+                    val iconColor = when (signal.type) {
+                        SignalType.BUY -> Color(0xFF4CAF50)
+                        SignalType.SELL -> Color(0xFFE57373)
+                        SignalType.HOLD -> Color.Gray
+                    }
+
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Text(
+                        text = signal.pair,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    BrokerBadge(signal.assetType)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = signal.type.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = iconColor
+                    )
+                }
+
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(22.dp)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatTimestamp(signal.timestamp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                StatusBadge(signal.status)
+            }
+
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    InfoItem("Current Price", "€${String.format("%.2f", signal.currentPrice)}")
+                    InfoItem("Suggested", "€${String.format("%.2f", signal.suggestedPrice)}")
+                    InfoItem("Amount", "€${String.format("%.2f", signal.suggestedAmount)}")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    InfoItem("Stop Loss", "€${String.format("%.2f", signal.stopLoss)}")
+                    InfoItem("Take Profit", "€${String.format("%.2f", signal.takeProfit)}")
+                    InfoItem("R/R Ratio", String.format("%.2f", signal.riskRewardRatio))
+                }
+
+                if (signal.getReasonsList().isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Reasons:",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    signal.getReasonsList().forEach { reason ->
+                        Text(
+                            text = "• $reason",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (signal.executedPrice != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InfoItem("Executed Price", "€${String.format("%.2f", signal.executedPrice)}")
+                }
+            }
+        }
     }
 }
 

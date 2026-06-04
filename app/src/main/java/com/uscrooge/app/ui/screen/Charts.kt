@@ -19,6 +19,8 @@ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
+import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
@@ -38,12 +40,13 @@ fun EquityCurveChart(
     }
 
     val modelProducer = remember { CartesianChartModelProducer() }
+    val dateFormat = remember { java.text.SimpleDateFormat("MM/dd\nHH:mm", java.util.Locale.US) }
 
     LaunchedEffect(dataPoints) {
         modelProducer.runTransaction {
             lineSeries {
                 series(
-                    dataPoints.map { kotlin.math.round(it.first * 10000f) / 10000f },
+                    dataPoints.map { it.first },
                     dataPoints.map { it.second }
                 )
             }
@@ -61,7 +64,11 @@ fun EquityCurveChart(
             chart = rememberCartesianChart(
                 rememberLineCartesianLayer(),
                 startAxis = VerticalAxis.rememberStart(),
-                bottomAxis = HorizontalAxis.rememberBottom()
+                bottomAxis = HorizontalAxis.rememberBottom(
+                    valueFormatter = { _: CartesianMeasuringContext, value: Double, _: Axis.Position.Vertical? ->
+                        dateFormat.format(java.util.Date((value.toLong() * 3600000L)))
+                    }
+                )
             ),
             modelProducer = modelProducer,
             modifier = Modifier
@@ -93,7 +100,11 @@ fun MiniPriceChart(
         chart = rememberCartesianChart(
             rememberLineCartesianLayer(),
             startAxis = VerticalAxis.rememberStart(),
-            bottomAxis = HorizontalAxis.rememberBottom()
+            bottomAxis = HorizontalAxis.rememberBottom(
+                valueFormatter = { _: CartesianMeasuringContext, value: Double, _: Axis.Position.Vertical? ->
+                    java.text.DecimalFormat("0").format(value)
+                }
+            )
         ),
         modelProducer = modelProducer,
         modifier = modifier.height(80.dp)
@@ -223,7 +234,11 @@ fun DrawdownChart(
             chart = rememberCartesianChart(
                 rememberLineCartesianLayer(),
                 startAxis = VerticalAxis.rememberStart(),
-                bottomAxis = HorizontalAxis.rememberBottom()
+                bottomAxis = HorizontalAxis.rememberBottom(
+                    valueFormatter = { _: CartesianMeasuringContext, value: Double, _: Axis.Position.Vertical? ->
+                        java.text.DecimalFormat("0").format(value)
+                    }
+                )
             ),
             modelProducer = modelProducer,
             modifier = Modifier

@@ -722,6 +722,7 @@ class AlpacaApiClient(
         limitPrice: Double?,
         stopPrice: Double?,
         takeProfitPrice: Double?,
+        notional: Double?,
         validate: Boolean
     ): Result<String> {
         if (apiKey.isBlank() || apiSecret.isBlank()) {
@@ -729,6 +730,13 @@ class AlpacaApiClient(
         }
         return try {
             val normalizedSymbol = normalizeSymbol(symbol)
+
+            if (notional != null && notional <= 0.0) {
+                return Result.failure(Exception("Invalid notional value $notional for $symbol. Notional must be a positive amount."))
+            }
+            if (notional == null && quantity <= 0.0) {
+                return Result.failure(Exception("Invalid quantity $quantity for $symbol. Quantity must be a positive number of shares."))
+            }
 
             val alpacaOrderType = when (orderType) {
                 OrderType.MARKET -> "market"
@@ -739,7 +747,8 @@ class AlpacaApiClient(
 
             val orderRequest = AlpacaOrderRequest(
                 symbol = normalizedSymbol,
-                qty = quantity,
+                qty = if (notional != null) null else quantity,
+                notional = notional,
                 side = side.name.lowercase(),
                 type = alpacaOrderType,
                 time_in_force = "day",

@@ -9,6 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.max
 
 data class SignalResult(
     val signal: TradingSignal?,
@@ -51,7 +52,7 @@ class TradingStrategy @Inject constructor(
             sentiment = sentiment
         )
 
-        if (config.useVolumeAnalysis && analysis.volume.volumeRatio < config.minVolumeRatio) {
+        if (config.useVolumeAnalysis && analysis.volume.volumeRatio <= 0.3) {
             return SignalResult(signal = null, analysis = analysis)
         }
 
@@ -95,9 +96,17 @@ class TradingStrategy @Inject constructor(
         )
 
         val winRate = if (config.useKellyCriterion) {
-            val wins = tradeJournalDao.getWinCountByPair(pair)
-            val total = tradeJournalDao.getTotalTradeCountByPair(pair)
-            if (total >= MIN_TRADES_FOR_KELLY) wins.toDouble() / total else null
+            val pairWins = tradeJournalDao.getWinCountByPair(pair)
+            val pairTotal = tradeJournalDao.getTotalTradeCountByPair(pair)
+            if (pairTotal >= MIN_TRADES_FOR_KELLY) {
+                pairWins.toDouble() / pairTotal
+            } else {
+                val globalWins = tradeJournalDao.getGlobalWinCount()
+                val globalTotal = tradeJournalDao.getGlobalTradeCount()
+                if (globalTotal >= MIN_TRADES_FOR_KELLY) {
+                    globalWins.toDouble() / globalTotal
+                } else null
+            }
         } else null
 
         val suggestedAmount = calculatePositionSize(
@@ -154,8 +163,17 @@ class TradingStrategy @Inject constructor(
         higherTimeframeTrends: List<Trend> = emptyList(),
         sentiment: FearGreedIndex? = null
     ): SignalType {
-        var buyScore = scoreRSI(analysis) + scoreMACD(analysis) + scoreTrend(analysis)
+        var buyScore = 0.0
         var sellScore = 0.0
+
+        val rsiScore = scoreRSI(analysis)
+        if (rsiScore > 0) buyScore += rsiScore else sellScore += abs(rsiScore)
+
+        val macdScore = scoreMACD(analysis)
+        if (macdScore > 0) buyScore += macdScore else sellScore += abs(macdScore)
+
+        val trendScore = scoreTrend(analysis)
+        if (trendScore > 0) buyScore += trendScore else sellScore += abs(trendScore)
 
         val candleScore = scoreCandlestickPattern(analysis)
         if (candleScore > 0) buyScore += candleScore else sellScore += abs(candleScore)
@@ -173,6 +191,10 @@ class TradingStrategy @Inject constructor(
 
         val stochScore = scoreStochRSI(analysis)
         if (stochScore > 0) buyScore += stochScore else sellScore += abs(stochScore)
+
+        val dynamicAdjusted = applyDynamicWeights(analysis, buyScore, sellScore)
+        buyScore = dynamicAdjusted.first
+        sellScore = dynamicAdjusted.second
 
         val timeframeAdjusted = applyMultiTimeframeFilter(higherTimeframeTrends, buyScore, sellScore)
         buyScore = timeframeAdjusted.first
@@ -266,6 +288,57 @@ class TradingStrategy @Inject constructor(
         }
     }
 
+    private fun applyDynamicWeights(
+        analysis: TechnicalAnalysis,
+        buyScore: Double,
+        sellScore: Double
+    ): Pair<Double, Double> {
+        val adx = analysis.adx ?: return Pair(buyScore, sellScore)
+        val bb = analysis.bollingerBands
+        val rsi = analysis.rsi
+
+        var adjustedBuy = buyScore
+        var adjustedSell = sellScore
+
+        when (adx.signal) {
+            ADX.Signal.STRONG_TREND -> {
+                // In strong trends, give more weight to MACD and trend, less to mean reversion
+                val macdScore = scoreMACD(analysis)
+                val trendScore = scoreTrend(analysis)
+                val boost = (macdScore + trendScore) * 0.3
+                if (boost > 0) adjustedBuy += abs(boost) else adjustedSell += abs(boost)
+
+                if (bb != null && (bb.signal == BollingerBands.Signal.BELOW_LOWER ||
+                        bb.signal == BollingerBands.Signal.ABOVE_UPPER)) {
+                    if (adjustedBuy > adjustedSell) adjustedBuy -= 0.5
+                    else adjustedSell -= 0.5
+                }
+            }
+            ADX.Signal.WEAK_TREND -> {
+                // In ranging markets, give more weight to RSI and Bollinger (mean reversion)
+                if (bb != null) {
+                    when (bb.signal) {
+                        BollingerBands.Signal.BELOW_LOWER -> adjustedBuy += 0.5
+                        BollingerBands.Signal.NEAR_LOWER -> adjustedBuy += 0.3
+                        BollingerBands.Signal.ABOVE_UPPER -> adjustedSell += 0.5
+                        BollingerBands.Signal.NEAR_UPPER -> adjustedSell += 0.3
+                        else -> {}
+                    }
+                }
+                if (rsi.signal == RSI.Signal.OVERSOLD) adjustedBuy += 0.5
+                else if (rsi.signal == RSI.Signal.OVERBOUGHT) adjustedSell += 0.5
+            }
+            ADX.Signal.MODERATE_TREND -> {
+                // Balanced approach, slight edge to trend following
+                val trendScore = scoreTrend(analysis)
+                if (trendScore > 0) adjustedBuy += trendScore * 0.2
+                else adjustedSell += abs(trendScore) * 0.2
+            }
+        }
+
+        return Pair(adjustedBuy, adjustedSell)
+    }
+
     private fun scoreStochRSI(analysis: TechnicalAnalysis): Double {
         val stoch = analysis.stochasticRSI ?: return 0.0
         return when (stoch.signal) {
@@ -307,7 +380,7 @@ class TradingStrategy @Inject constructor(
             if (adjustedBuy > adjustedSell) adjustedBuy -= 1.0
             else if (adjustedSell > adjustedBuy) adjustedSell -= 1.0
         }
-        return Pair(maxOf(adjustedBuy, 0.0), maxOf(adjustedSell, 0.0))
+        return Pair(adjustedBuy, adjustedSell)
     }
 
     private fun calculateSentimentAdjustment(sentiment: FearGreedIndex?): Double {
@@ -434,11 +507,25 @@ class TradingStrategy @Inject constructor(
         }
     }
 
+    private val correlationMatrix: Map<String, Map<String, Double>> = mapOf(
+        "BTC" to mapOf("ETH" to 0.7, "SOL" to 0.5, "XRP" to 0.4),
+        "ETH" to mapOf("BTC" to 0.7, "SOL" to 0.55, "XRP" to 0.45),
+        "SOL" to mapOf("BTC" to 0.5, "ETH" to 0.55, "XRP" to 0.5),
+        "XRP" to mapOf("BTC" to 0.4, "ETH" to 0.45, "SOL" to 0.5),
+        "AAPL" to mapOf("MSFT" to 0.6, "GOOGL" to 0.55),
+        "MSFT" to mapOf("AAPL" to 0.6, "GOOGL" to 0.5),
+        "GOOGL" to mapOf("AAPL" to 0.55, "MSFT" to 0.5)
+    )
+
     private fun isCorrelated(pair1: String, pair2: String): Boolean {
         if (pair1 == pair2) return false
+        val base1 = pair1.substringBefore("/").uppercase()
+        val base2 = pair2.substringBefore("/").uppercase()
         val quote1 = pair1.substringAfter("/").uppercase()
         val quote2 = pair2.substringAfter("/").uppercase()
-        return quote1 == quote2
+
+        if (quote1 == quote2) return true
+        return correlationMatrix[base1]?.get(base2)?.let { it >= 0.5 } ?: false
     }
 
     private fun buildReasonsList(
@@ -561,12 +648,29 @@ class TradingStrategy @Inject constructor(
     fun evaluateExitConditions(
         position: Position,
         currentPrice: Double,
-        config: TradingConfig
+        config: TradingConfig,
+        atr: Double? = null
     ): ExitSignal? {
         val currentPnLPercent = ((currentPrice - position.averageEntryPrice) / position.averageEntryPrice) * 100
 
+        val effectiveStopLossPercent = if (atr != null && currentPrice > 0) {
+            val atrRatioPct = (atr / currentPrice) * 100.0
+            maxOf(config.stopLossPercent, atrRatioPct * config.stopLossATRMultiplier)
+        } else {
+            config.stopLossPercent
+        }
+
+        val effectiveTrailingStopPercent = if (atr != null && currentPrice > 0) {
+            val atrRatioPct = (atr / currentPrice) * 100.0
+            maxOf(config.trailingStopPercent, atrRatioPct * 2.0)
+        } else {
+            config.trailingStopPercent
+        }
+
+        val effectiveTakeProfitPercent = config.takeProfitPercent * (effectiveStopLossPercent / config.stopLossPercent)
+
         // Check stop loss
-        if (currentPnLPercent <= -config.stopLossPercent) {
+        if (currentPnLPercent <= -effectiveStopLossPercent) {
             return ExitSignal(
                 reason = "Stop loss triggered",
                 urgency = ExitUrgency.IMMEDIATE,
@@ -575,7 +679,7 @@ class TradingStrategy @Inject constructor(
         }
 
         // Check take profit
-        if (currentPnLPercent >= config.takeProfitPercent) {
+        if (currentPnLPercent >= effectiveTakeProfitPercent) {
             return ExitSignal(
                 reason = "Take profit target reached",
                 urgency = ExitUrgency.NORMAL,
@@ -583,12 +687,11 @@ class TradingStrategy @Inject constructor(
             )
         }
 
-        // Check trailing stop — only triggers when current profit exceeds the trailing
-        // distance (e.g. 1.5 %), ensuring a meaningful gain is locked in and
-        // preventing premature exit from tiny price fluctuations.
+        // Check trailing stop — ATR-aware: wider trail in volatile assets,
+        // narrower in calm ones to lock in gains earlier.
         val peakPrice = maxOf(position.peakPrice, position.currentPrice)
-        val trailingStopPrice = peakPrice * (1 - config.trailingStopPercent / 100)
-        if (currentPrice < trailingStopPrice && currentPnLPercent > config.trailingStopPercent) {
+        val trailingStopPrice = peakPrice * (1 - effectiveTrailingStopPercent / 100)
+        if (currentPrice < trailingStopPrice && currentPnLPercent > effectiveTrailingStopPercent) {
             return ExitSignal(
                 reason = "Trailing stop triggered",
                 urgency = ExitUrgency.IMMEDIATE,

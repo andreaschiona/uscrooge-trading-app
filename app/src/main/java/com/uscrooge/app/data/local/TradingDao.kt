@@ -134,6 +134,12 @@ interface TradeJournalDao {
 
     @Query("SELECT COUNT(*) FROM trade_journal WHERE pair = :pair")
     suspend fun getTotalTradeCountByPair(pair: String): Int
+
+    @Query("SELECT COUNT(*) FROM trade_journal WHERE profitLoss > 0")
+    suspend fun getGlobalWinCount(): Int
+
+    @Query("SELECT COUNT(*) FROM trade_journal")
+    suspend fun getGlobalTradeCount(): Int
 }
 
 data class PairTradeStats(

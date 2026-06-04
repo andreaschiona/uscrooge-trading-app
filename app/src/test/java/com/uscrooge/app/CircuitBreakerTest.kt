@@ -3,6 +3,7 @@ package com.uscrooge.app
 import com.uscrooge.app.executor.CircuitBreaker
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.model.TradingConfig
 import io.mockk.coEvery
 import io.mockk.every
@@ -18,12 +19,14 @@ class CircuitBreakerTest {
     private lateinit var circuitBreaker: CircuitBreaker
     private val orderDao: OrderDao = mockk()
     private val positionDao: PositionDao = mockk()
+    private val tradeJournalDao: TradeJournalDao = mockk()
 
     @Before
     fun setup() {
-        circuitBreaker = CircuitBreaker(orderDao, positionDao)
+        circuitBreaker = CircuitBreaker(orderDao, positionDao, tradeJournalDao)
         coEvery { orderDao.getTradeCountSince(any()) } returns 0
         coEvery { positionDao.getOpenPositions() } returns flowOf(emptyList())
+        coEvery { tradeJournalDao.getTotalPnLSince(any()) } returns 0.0
     }
 
     @Test

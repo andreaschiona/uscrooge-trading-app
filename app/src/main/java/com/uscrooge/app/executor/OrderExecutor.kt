@@ -1,6 +1,7 @@
 package com.uscrooge.app.executor
 
 import android.util.Log
+import com.uscrooge.app.analysis.TechnicalAnalyzer
 import com.uscrooge.app.data.api.AlpacaApiClient
 import com.uscrooge.app.data.api.BrokerApi
 import com.uscrooge.app.data.api.BrokerOrderInfo
@@ -39,7 +40,8 @@ class OrderExecutor @Inject constructor(
     private val positionDao: PositionDao,
     private val tradeJournalDao: TradeJournalDao,
     private val circuitBreaker: CircuitBreaker,
-    private val gitHubIssueReporter: GitHubIssueReporter
+    private val gitHubIssueReporter: GitHubIssueReporter,
+    private val technicalAnalyzer: TechnicalAnalyzer
 ) {
 
     @Volatile
@@ -50,6 +52,9 @@ class OrderExecutor @Inject constructor(
         private const val ORDER_POLL_INTERVAL_MS = 2000L
         private const val ORDER_POLL_TIMEOUT_MS = 30000L
         private const val MAX_FILL_RETRIES = 5
+        private const val ATR_PERIOD = 14
+        private const val TIME_STOP_HOURS = 48
+        private const val TIME_STOP_MIN_PROFIT_PERCENT = -3.0
     }
 
     fun updateConfig(newConfig: TradingConfig) {
@@ -115,8 +120,11 @@ class OrderExecutor @Inject constructor(
             return Result.failure(tickerResult.exceptionOrNull()!!)
         }
 
-        val currentPrice = tickerResult.getOrNull()!!.ask
-        val slippage = abs((currentPrice - signal.suggestedPrice) / signal.suggestedPrice) * 100
+        val ticker = tickerResult.getOrNull()!!
+        val currentPrice = ticker.ask
+        val slippage = if (ticker.bid > 0) {
+            abs((ticker.ask - ticker.bid) / ticker.bid) * 100
+        } else 0.0
 
         if (slippage > config.maxSlippagePercent) {
             Log.w(TAG, "Slippage ${String.format("%.2f", slippage)}% exceeds max ${config.maxSlippagePercent}% for ${signal.pair}. Forcing market order.")
@@ -541,6 +549,13 @@ class OrderExecutor @Inject constructor(
                 val isAlpaca = broker === alpacaApiClient
                 val symbol = if (isAlpaca) position.pair.substringBefore("/") else position.pair
 
+                // --- Fix #12: Check if protective orders were filled by exchange ---
+                val protectiveCheck = checkProtectiveOrderExecution(position, broker)
+                if (protectiveCheck != null) {
+                    closedPositions.add(protectiveCheck)
+                    continue
+                }
+
                 val tickerResult = if (isAlpaca) {
                     broker.getTicker(symbol)
                 } else {
@@ -553,12 +568,32 @@ class OrderExecutor @Inject constructor(
                 val updatedPosition = position.calculateCurrentValue(currentPrice)
                 positionDao.updatePosition(updatedPosition)
 
-                val exitSignal = strategy.evaluateExitConditions(updatedPosition, currentPrice, config)
+                // Fetch OHLC and calculate ATR for adaptive exit conditions
+                val ohlcResult = if (isAlpaca) {
+                    broker.getOHLC(symbol)
+                } else {
+                    (broker as KrakenApiClient).getOHLC(TradingPair.fromString(position.pair))
+                }
+                val atr = if (ohlcResult.isSuccess) {
+                    val ohlc = ohlcResult.getOrNull()!!
+                    technicalAnalyzer.calculateATR(ohlc, ATR_PERIOD)
+                } else null
 
-                if (exitSignal != null) {
-                    Log.w(TAG, "Exit condition for ${position.pair}: ${exitSignal.reason}")
+                val exitSignal = strategy.evaluateExitConditions(
+                    updatedPosition, currentPrice, config, atr
+                )
 
-                    val sellResult = executeExitOrder(updatedPosition, exitSignal, broker)
+                // --- Fix #10: Time stop for prolonged losses ---
+                val timeExit = if (exitSignal == null) {
+                    checkTimeStop(updatedPosition, currentPrice)
+                } else null
+
+                val activeExit = exitSignal ?: timeExit
+
+                if (activeExit != null) {
+                    Log.w(TAG, "Exit condition for ${position.pair}: ${activeExit.reason}")
+
+                    val sellResult = executeExitOrder(updatedPosition, activeExit, broker)
                     if (sellResult.isSuccess) {
                         closedPositions.add(updatedPosition)
                     }
@@ -569,6 +604,94 @@ class OrderExecutor @Inject constructor(
         }
 
         return closedPositions
+    }
+
+    private suspend fun checkProtectiveOrderExecution(position: Position, broker: BrokerApi): Position? {
+        val stopOrderId = position.exchangeStopOrderId
+        val tpOrderId = position.exchangeTakeProfitOrderId
+
+        if (stopOrderId == null && tpOrderId == null) return null
+
+        // Check stop-loss order status
+        if (stopOrderId != null) {
+            try {
+                val orderInfo = broker.getOrder(stopOrderId)
+                if (orderInfo.isSuccess) {
+                    val info = orderInfo.getOrNull()!!
+                    if (info.status.lowercase() == "closed") {
+                        // Stop-loss was filled by the exchange, close position locally
+                        val exitPrice = info.avgFillPrice
+                        val totalValue = position.amount * exitPrice
+                        val realizedPnL = totalValue - position.totalInvested - info.fee
+                        val closedPosition = position.copy(
+                            currentPrice = exitPrice,
+                            currentValue = totalValue,
+                            unrealizedPnL = realizedPnL,
+                            realizedPnL = realizedPnL,
+                            isOpen = false,
+                            closedAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis(),
+                            exchangeStopOrderId = null,
+                            exchangeTakeProfitOrderId = null
+                        )
+                        positionDao.updatePosition(closedPosition)
+                        reportPositionFeedback(closedPosition, "Stop-loss filled by exchange", config)
+                        recordJournalEntry(closedPosition, "Stop-loss filled by exchange", info.fee)
+                        Log.i(TAG, "Position ${position.pair} closed: stop-loss order $stopOrderId was filled by exchange")
+                        return closedPosition
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Check take-profit order status
+        if (tpOrderId != null) {
+            try {
+                val orderInfo = broker.getOrder(tpOrderId)
+                if (orderInfo.isSuccess) {
+                    val info = orderInfo.getOrNull()!!
+                    if (info.status.lowercase() == "closed") {
+                        val exitPrice = info.avgFillPrice
+                        val totalValue = position.amount * exitPrice
+                        val realizedPnL = totalValue - position.totalInvested - info.fee
+                        val closedPosition = position.copy(
+                            currentPrice = exitPrice,
+                            currentValue = totalValue,
+                            unrealizedPnL = realizedPnL,
+                            realizedPnL = realizedPnL,
+                            isOpen = false,
+                            closedAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis(),
+                            exchangeStopOrderId = null,
+                            exchangeTakeProfitOrderId = null
+                        )
+                        positionDao.updatePosition(closedPosition)
+                        reportPositionFeedback(closedPosition, "Take-profit filled by exchange", config)
+                        recordJournalEntry(closedPosition, "Take-profit filled by exchange", info.fee)
+                        Log.i(TAG, "Position ${position.pair} closed: take-profit order $tpOrderId was filled by exchange")
+                        return closedPosition
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        return null
+    }
+
+    private fun checkTimeStop(position: Position, currentPrice: Double): ExitSignal? {
+        val elapsed = System.currentTimeMillis() - position.openedAt
+        val elapsedHours = elapsed / (1000.0 * 60 * 60)
+        if (elapsedHours < TIME_STOP_HOURS) return null
+
+        val currentPnLPercent = ((currentPrice - position.averageEntryPrice) / position.averageEntryPrice) * 100
+        if (currentPnLPercent < TIME_STOP_MIN_PROFIT_PERCENT) {
+            return ExitSignal(
+                reason = "Time stop: position in loss for ${TIME_STOP_HOURS}h without recovery",
+                urgency = ExitUrgency.NORMAL,
+                suggestedPrice = currentPrice
+            )
+        }
+        return null
     }
 
     private suspend fun executeExitOrder(position: Position, exitSignal: ExitSignal, broker: BrokerApi): Result<Order> {

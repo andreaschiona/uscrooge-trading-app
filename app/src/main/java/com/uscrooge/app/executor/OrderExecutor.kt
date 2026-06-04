@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
-import kotlin.math.max
 
 data class Quadruple<A, B, C, D>(
     val first: A,
@@ -123,13 +122,9 @@ class OrderExecutor @Inject constructor(
 
         val ticker = tickerResult.getOrNull()!!
         val currentPrice = ticker.ask
-        val spreadPercent = if (ticker.bid > 0) {
+        val slippage = if (ticker.bid > 0) {
             abs((ticker.ask - ticker.bid) / ticker.bid) * 100
         } else 0.0
-        val slippage = max(
-            spreadPercent,
-            abs((currentPrice - signal.suggestedPrice) / signal.suggestedPrice) * 100
-        )
 
         if (slippage > config.maxSlippagePercent) {
             Log.w(TAG, "Slippage ${String.format("%.2f", slippage)}% exceeds max ${config.maxSlippagePercent}% for ${signal.pair}. Forcing market order.")

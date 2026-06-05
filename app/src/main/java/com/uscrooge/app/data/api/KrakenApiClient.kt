@@ -698,6 +698,7 @@ class KrakenApiClient(
         limitPrice: Double?,
         stopPrice: Double?,
         takeProfitPrice: Double?,
+        notional: Double?,
         validate: Boolean
     ): Result<String> {
         return addOrder(

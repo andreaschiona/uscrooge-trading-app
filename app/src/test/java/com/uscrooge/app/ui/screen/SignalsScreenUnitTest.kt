@@ -10,6 +10,7 @@ class SignalsScreenUnitTest {
     @Test
     fun `StatusBadge displays correct text for each status`() {
         assertEquals("Pending", getStatusText(SignalStatus.PENDING))
+        assertEquals("Auto Open", getStatusText(SignalStatus.AUTO_OPEN))
         assertEquals("Executed", getStatusText(SignalStatus.EXECUTED))
         assertEquals("Ignored", getStatusText(SignalStatus.IGNORED))
         assertEquals("Failed", getStatusText(SignalStatus.FAILED))
@@ -83,6 +84,7 @@ class SignalsScreenUnitTest {
 
     private fun getStatusText(status: SignalStatus): String = when (status) {
         SignalStatus.PENDING -> "Pending"
+        SignalStatus.AUTO_OPEN -> "Auto Open"
         SignalStatus.EXECUTING -> "Executing"
         SignalStatus.EXECUTED -> "Executed"
         SignalStatus.IGNORED -> "Ignored"

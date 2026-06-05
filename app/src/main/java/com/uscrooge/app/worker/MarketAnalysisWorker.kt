@@ -8,6 +8,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.uscrooge.app.data.model.SignalStatus
 import com.uscrooge.app.data.repository.ConfigRepository
 import com.uscrooge.app.data.repository.TradingRepository
 import com.uscrooge.app.di.BrokerRegistry
@@ -150,10 +151,17 @@ class MarketAnalysisWorker @AssistedInject constructor(
                     if (signal.strength >= config.minSignalStrength) {
                         try {
                             val result = orderExecutor.executeSignal(signal)
-                            if (result.isSuccess && config.notifyOnExecution) {
-                                notificationHelper.sendOrderExecutedNotification(
-                                    result.getOrNull()!!
-                                )
+                            if (result.isSuccess) {
+                                // Mark auto-opened signals with AUTO_OPEN status
+                                val order = result.getOrNull()
+                                if (order?.signalId != null) {
+                                    repository.getSignalById(order.signalId)?.let { executedSignal ->
+                                        repository.updateSignal(executedSignal.copy(status = SignalStatus.AUTO_OPEN))
+                                    }
+                                }
+                                if (config.notifyOnExecution) {
+                                    notificationHelper.sendOrderExecutedNotification(order!!)
+                                }
                             } else if (result.isFailure) {
                                 val error = result.exceptionOrNull()
                                 if (config.notifyOnErrors) {

@@ -16,7 +16,7 @@ import com.uscrooge.app.data.model.*
         TradeJournalEntry::class,
         AuditLogEntry::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class TradingDatabase : RoomDatabase() {
@@ -40,7 +40,8 @@ abstract class TradingDatabase : RoomDatabase() {
                 )
                     .addMigrations(
                         MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                        MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                        MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8,
+                        MIGRATION_8_9
                     )
                 if (BuildConfig.DEBUG) {
                     builder.fallbackToDestructiveMigration()

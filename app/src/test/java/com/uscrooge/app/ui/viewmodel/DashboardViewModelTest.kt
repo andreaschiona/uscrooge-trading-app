@@ -259,7 +259,8 @@ class DashboardViewModelTest {
 
         val portfolio = Portfolio(0.0, 1000.0, 0.0, 0.0, emptyList(), 1000.0, "Test")
         val equityCurve = viewModel.generateEquityCurve(portfolio)
-        assertEquals(1, equityCurve.size)
+        assertEquals(2, equityCurve.size)
+        assertEquals(1000.0f, equityCurve.last().second, 0.001f)
     }
 
     private fun createTestPortfolio(): Portfolio = Portfolio(

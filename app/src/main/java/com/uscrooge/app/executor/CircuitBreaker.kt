@@ -3,6 +3,7 @@ package com.uscrooge.app.executor
 import android.util.Log
 import com.uscrooge.app.data.local.OrderDao
 import com.uscrooge.app.data.local.PositionDao
+import com.uscrooge.app.data.local.TradeJournalDao
 import com.uscrooge.app.data.model.TradingConfig
 import kotlinx.coroutines.flow.first
 import java.util.Locale
@@ -22,7 +23,8 @@ import javax.inject.Singleton
 @Singleton
 class CircuitBreaker @Inject constructor(
     private val orderDao: OrderDao,
-    private val positionDao: PositionDao
+    private val positionDao: PositionDao,
+    private val tradeJournalDao: TradeJournalDao
 ) {
     companion object {
         private const val TAG = "CircuitBreaker"
@@ -122,12 +124,24 @@ class CircuitBreaker @Inject constructor(
         val totalInvested = positions.sumOf { it.totalInvested }
         if (totalInvested <= 0) return null
 
-        val totalPnL = positions.sumOf { it.unrealizedPnL }
-        val drawdownPercent = (totalPnL / totalInvested) * 100
+        // Use realized PnL for daily drawdown check (closed positions today)
+        val startOfDay = getStartOfDayMillis()
+        val realizedPnL = tradeJournalDao.getTotalPnLSince(startOfDay) ?: 0.0
+        val realizedDrawdownPercent = if (totalInvested > 0) (realizedPnL / totalInvested) * 100 else 0.0
 
-        if (drawdownPercent < -config.maxDailyDrawdownPercent) {
-            val formatted = String.format(Locale.US, "%.1f", drawdownPercent)
+        if (realizedDrawdownPercent < -config.maxDailyDrawdownPercent) {
+            val formatted = String.format(Locale.US, "%.1f", realizedDrawdownPercent)
             return "Daily drawdown $formatted% exceeds limit of -${config.maxDailyDrawdownPercent}%"
+        }
+
+        // Unrealized PnL has a wider threshold (2x) to avoid false positives from temporary paper losses
+        val unrealizedPnL = positions.sumOf { it.unrealizedPnL }
+        val unrealizedDrawdownPercent = (unrealizedPnL / totalInvested) * 100
+        val unrealizedLimit = config.maxDailyDrawdownPercent * 2.0
+
+        if (unrealizedDrawdownPercent < -unrealizedLimit) {
+            val formatted = String.format(Locale.US, "%.1f", unrealizedDrawdownPercent)
+            return "Unrealized drawdown $formatted% exceeds limit of -${String.format(Locale.US, "%.1f", unrealizedLimit)}%"
         }
 
         return null

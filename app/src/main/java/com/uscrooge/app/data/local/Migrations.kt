@@ -84,3 +84,11 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE positions ADD COLUMN pyramidLevel INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE trading_signals ADD COLUMN assetName TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE trading_signals ADD COLUMN assetDescription TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE trading_signals ADD COLUMN assetType TEXT NOT NULL DEFAULT 'CRYPTO'")
+    }
+}

@@ -27,6 +27,7 @@ interface BrokerApi {
         limitPrice: Double? = null,
         stopPrice: Double? = null,
         takeProfitPrice: Double? = null,
+        notional: Double? = null,
         validate: Boolean = false
     ): Result<String>
 

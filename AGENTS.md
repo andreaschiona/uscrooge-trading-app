@@ -14,9 +14,10 @@
 - Single unit test method: `./gradlew.bat :app:testDebugUnitTest --tests "com.uscrooge.app.TechnicalAnalyzerTest.RSI calculation with oversold condition"`
 
 ## Environment/toolchain constraints
-- Project targets AGP `8.6.1`, Kotlin `2.1.0`, KSP `2.1.0-1.0.29`, Hilt `2.53`, Gradle `8.10`, `compileSdk 35`, `targetSdk 35`, `minSdk 26`, Java/Kotlin JVM target 17.
+- Project targets AGP `9.2.1`, Kotlin `2.1.20`, KSP `2.1.20-2.0.1`, Hilt `2.59.2`, Room `2.8.4`, Gradle `9.4.1`, `compileSdk 35`, `targetSdk 35`, `minSdk 26`, Java/Kotlin JVM target 17.
 - `local.properties` is required for local SDK path (`sdk.dir=...`) and should stay local-only.
 - If Gradle fails early with `IllegalArgumentException: 25.0.3`, the process is running on an unsupported JDK; switch to JDK 17.
+- AGP 9 uses built-in Kotlin support by default. This project disables it via `android.builtInKotlin=false` and `android.newDsl=false` in `gradle.properties` (temporary compat flags; remove when migrating off Kotlin Android plugin).
 
 ## Data/storage and background behavior
 - Persistent data is split between Room (`TradingDatabase`, DB name `uscrooge_database`) and DataStore preferences (`trading_config`).

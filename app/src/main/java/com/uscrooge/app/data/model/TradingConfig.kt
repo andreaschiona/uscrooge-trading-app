@@ -68,6 +68,7 @@ data class TradingConfig(
 
     // UI preferences
     val useDarkMode: Boolean = false,
+    val biometricEnabled: Boolean = false,
 
     // Multi-timeframe analysis
     val useMultiTimeframe: Boolean = true,

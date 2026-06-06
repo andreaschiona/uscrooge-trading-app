@@ -71,6 +71,7 @@ class ConfigRepository(private val context: Context) {
         private val MAX_DAILY_DRAWDOWN_PERCENT = doublePreferencesKey("max_daily_drawdown_percent")
         private val MAX_CONSECUTIVE_FAILURES = intPreferencesKey("max_consecutive_failures")
         private val CIRCUIT_BREAKER_COOLDOWN_MINUTES = intPreferencesKey("circuit_breaker_cooldown_minutes")
+        private val BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
         private val USE_DARK_MODE = booleanPreferencesKey("use_dark_mode")
         private val SENTIMENT_ENABLED = booleanPreferencesKey("sentiment_enabled")
         private val SENTIMENT_WEIGHT = doublePreferencesKey("sentiment_weight")
@@ -117,6 +118,7 @@ class ConfigRepository(private val context: Context) {
                 apiTimeout = preferences[API_TIMEOUT] ?: 30000,
                 alpacaApiKey = decryptApiKey(preferences[ALPACA_API_KEY] ?: ""),
                 alpacaApiSecret = decryptApiSecret(preferences[ALPACA_API_SECRET] ?: ""),
+                biometricEnabled = preferences[BIOMETRIC_ENABLED] ?: false,
                 useDarkMode = preferences[USE_DARK_MODE] ?: false,
                 alpacaPaperTrading = preferences[ALPACA_PAPER_TRADING] ?: true,
                 stockTradingPairs = preferences[STOCK_TRADING_PAIRS]?.split(",")
@@ -176,6 +178,7 @@ class ConfigRepository(private val context: Context) {
             preferences[API_TIMEOUT] = config.apiTimeout
             preferences[ALPACA_API_KEY] = encryptApiKey(config.alpacaApiKey)
             preferences[ALPACA_API_SECRET] = encryptApiSecret(config.alpacaApiSecret)
+            preferences[BIOMETRIC_ENABLED] = config.biometricEnabled
             preferences[USE_DARK_MODE] = config.useDarkMode
             preferences[ALPACA_PAPER_TRADING] = config.alpacaPaperTrading
             preferences[STOCK_TRADING_PAIRS] = config.stockTradingPairs.joinToString(",")

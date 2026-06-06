@@ -9,17 +9,23 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -29,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.uscrooge.app.data.model.TradingConfig
 import com.uscrooge.app.data.repository.ConfigRepository
+import com.uscrooge.app.ui.lock.AppLockScreen
 import com.uscrooge.app.ui.onboarding.OnboardingScreen
 import com.uscrooge.app.ui.screen.DashboardScreen
 import com.uscrooge.app.ui.screen.SettingsScreen
@@ -43,12 +50,13 @@ import com.uscrooge.app.ui.viewmodel.TradeJournalViewModel
 import com.uscrooge.app.worker.MarketAnalysisWorker
 import com.uscrooge.app.worker.UpdateCheckWorker
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var configRepository: ConfigRepository
@@ -86,8 +94,50 @@ class MainActivity : ComponentActivity() {
             var onboardingDone by remember { mutableStateOf(false) }
             val showOnboarding = !config.onboardingCompleted && !onboardingDone
 
+            var biometricUnlocked by remember { mutableStateOf(!config.biometricEnabled) }
+            var lastActivityTime by remember { mutableStateOf(System.currentTimeMillis()) }
+            val inactivityTimeoutMs = 300_000L
+
+            LaunchedEffect(config.biometricEnabled) {
+                if (!config.biometricEnabled) biometricUnlocked = true
+                else biometricUnlocked = false
+            }
+
+            val lifecycleOwner = LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner, config.biometricEnabled) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_START && config.biometricEnabled) {
+                        biometricUnlocked = false
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+
+            LaunchedEffect(biometricUnlocked, config.biometricEnabled) {
+                if (biometricUnlocked && config.biometricEnabled) {
+                    while (true) {
+                        delay(60_000)
+                        if (System.currentTimeMillis() - lastActivityTime > inactivityTimeoutMs) {
+                            biometricUnlocked = false
+                        }
+                    }
+                }
+            }
+
             UScroogeAppTheme(darkTheme = config.useDarkMode) {
-                if (showOnboarding) {
+                if (config.biometricEnabled && !biometricUnlocked) {
+                    AppLockScreen(
+                        onUnlocked = {
+                            biometricUnlocked = true
+                            lastActivityTime = System.currentTimeMillis()
+                        },
+                        onUnavailable = {
+                            biometricUnlocked = true
+                            lastActivityTime = System.currentTimeMillis()
+                        }
+                    )
+                } else if (showOnboarding) {
                     val onboardingViewModel: OnboardingViewModel = hiltViewModel()
                     OnboardingScreen(
                         viewModel = onboardingViewModel,
@@ -99,10 +149,23 @@ class MainActivity : ComponentActivity() {
                     val navigateToSettings = remember {
                         intent?.getBooleanExtra("navigate_to_settings", false) == true
                     }
-                    MainScreen(
-                        configRepository = configRepository,
-                        navigateToSettings = navigateToSettings
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(config.biometricEnabled) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent()
+                                        lastActivityTime = System.currentTimeMillis()
+                                    }
+                                }
+                            }
+                    ) {
+                        MainScreen(
+                            configRepository = configRepository,
+                            navigateToSettings = navigateToSettings
+                        )
+                    }
                 }
             }
         }

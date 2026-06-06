@@ -134,6 +134,13 @@ fun SettingsScreen(
                                     editedConfig = currentConfig.copy(useDarkMode = checked)
                                 }
                             )
+                            SwitchSetting(
+                                title = "Biometric Lock",
+                                checked = currentConfig.biometricEnabled,
+                                onCheckedChange = { checked ->
+                                    editedConfig = currentConfig.copy(biometricEnabled = checked)
+                                }
+                            )
                         }
                     }
                 }

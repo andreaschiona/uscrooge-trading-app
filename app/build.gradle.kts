@@ -221,7 +221,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Security - Crypto for API keys
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")

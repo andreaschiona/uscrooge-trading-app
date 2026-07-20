@@ -213,9 +213,9 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Charts
-    implementation("com.patrykandpatrick.vico:compose:2.0.0")
-    implementation("com.patrykandpatrick.vico:compose-m3:2.0.0")
-    implementation("com.patrykandpatrick.vico:core:2.0.0")
+    implementation("com.patrykandpatrick.vico:compose:2.5.2")
+    implementation("com.patrykandpatrick.vico:compose-m3:2.5.2")
+    implementation("com.patrykandpatrick.vico:core:2.5.2")
 
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")
